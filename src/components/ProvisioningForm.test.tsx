@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import type { ParameterDefinition } from '../domain/cloudformation/types'
+import { SAMPLE_TEMPLATE, TemplateEditor } from './TemplateEditor'
 import { ProvisioningForm } from './ProvisioningForm'
 
 const definitions: ParameterDefinition[] = [
@@ -12,7 +13,7 @@ const definitions: ParameterDefinition[] = [
     type: 'String',
     description: 'Name shown to operators.',
     required: true,
-    constraints: {},
+    constraints: { minLength: 3, maxLength: 40, allowedPattern: '^[a-z-]+$' },
   },
   {
     name: 'Environment',
@@ -52,6 +53,30 @@ describe('ProvisioningForm', () => {
     expect(screen.getByLabelText('Instance Count')).toHaveValue(2)
     expect(screen.getByLabelText('Availability Zones')).toHaveValue([])
     expect(screen.getByText('Availability zones are fixed local examples; no AWS data is fetched.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Project Name')).toHaveAttribute('minLength', '3')
+    expect(screen.getByLabelText('Project Name')).toHaveAttribute('maxLength', '40')
+    expect(screen.getByLabelText('Project Name')).toHaveAttribute('pattern', '^[a-z-]+$')
+    expect(screen.getByLabelText('Instance Count')).toHaveAttribute('min', '1')
+    expect(screen.getByLabelText('Instance Count')).toHaveAttribute('max', '5')
+  })
+
+  it('renders metadata copy and generic fallback copy', () => {
+    const { rerender } = render(
+      <ProvisioningForm
+        definitions={[]}
+        warnings={[]}
+        onReview={() => undefined}
+        productName="Metadata product"
+        productDescription="Metadata description"
+      />,
+    )
+
+    expect(screen.getByRole('heading', { name: 'Metadata product' })).toBeInTheDocument()
+    expect(screen.getByText('Metadata description')).toBeInTheDocument()
+
+    rerender(<ProvisioningForm definitions={[]} warnings={[]} onReview={() => undefined} />)
+    expect(screen.getByRole('heading', { name: 'CloudFormation product' })).toBeInTheDocument()
+    expect(screen.getByText('Configure this product')).toBeInTheDocument()
   })
 
   it('updates field values and only shows a payload after valid review', async () => {
@@ -80,6 +105,21 @@ describe('ProvisioningForm', () => {
 })
 
 describe('App', () => {
+  it('shows normalization warnings beside the editor and preserves metadata copy', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const editor = screen.getByRole('textbox', { name: 'CloudFormation template' })
+    const source = `${SAMPLE_TEMPLATE}\n  UnsupportedList:\n    Type: List<String>\n`
+
+    expect(screen.getByRole('heading', { name: 'Web application baseline' })).toBeInTheDocument()
+    await user.click(editor)
+    await user.keyboard('{Control>}a{/Control}')
+    await user.keyboard('{Backspace}')
+    fireEvent.paste(editor, { clipboardData: { getData: () => source } })
+
+    await waitFor(() => expect(screen.getByRole('complementary', { name: 'Template diagnostics' })).toHaveTextContent('unsupported structured or list type'))
+  })
+
   it('retains the last valid form when the edited template becomes invalid', async () => {
     const user = userEvent.setup()
     render(<App />)
@@ -93,5 +133,19 @@ describe('App', () => {
 
     await waitFor(() => expect(screen.getByText(/parse error|invalid yaml|root must be an object/i)).toBeInTheDocument())
     expect(screen.getByLabelText('Application Name')).toBeInTheDocument()
+  })
+})
+
+describe('TemplateEditor', () => {
+  it('loads the sample and formats valid YAML or JSON through the controlled callback', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<TemplateEditor value='{"Parameters":{"Count":{"Type":"Number"}}}' onChange={onChange} />)
+
+    await user.click(screen.getByRole('button', { name: 'Load sample' }))
+    expect(onChange).toHaveBeenCalledWith(SAMPLE_TEMPLATE)
+
+    await user.click(screen.getByRole('button', { name: 'Format template' }))
+    expect(onChange).toHaveBeenLastCalledWith(expect.stringContaining('Parameters:\n'))
   })
 })

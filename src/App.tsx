@@ -45,7 +45,7 @@ function App() {
           <h2 id="template-editor-heading">Template editor</h2>
           <p className="panel-helper">Edit YAML or JSON to generate a local provisioning form.</p>
           <TemplateEditor value={source} onChange={handleSourceChange} />
-          <DiagnosticsPanel diagnostics={diagnostics} />
+          <DiagnosticsPanel diagnostics={diagnostics} warnings={model.warnings} />
         </section>
         <section className="workspace-panel preview-panel" aria-labelledby="provisioning-preview-heading">
           <h2 id="provisioning-preview-heading">Provisioning preview</h2>

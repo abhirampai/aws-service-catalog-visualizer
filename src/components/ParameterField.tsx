@@ -45,6 +45,9 @@ export function ParameterField({ definition, value, error, onChange }: Parameter
           value={value === undefined ? '' : String(value)}
           min={definition.constraints.minValue}
           max={definition.constraints.maxValue}
+          minLength={definition.constraints.minLength}
+          maxLength={definition.constraints.maxLength}
+          pattern={definition.constraints.allowedPattern}
           onChange={(event) => onChange(event.target.value)}
         />
       )}
