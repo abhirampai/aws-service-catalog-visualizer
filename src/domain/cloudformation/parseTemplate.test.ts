@@ -30,10 +30,11 @@ describe('parseTemplate', () => {
   })
 
   it('reports malformed JSON', () => {
-    const result = parseTemplate('{"Parameters":')
+    const result = parseTemplate('{\n  "Parameters": }')
 
     expect(result.document).toBeUndefined()
-    expect(result.diagnostics[0]).toMatchObject({ severity: 'error' })
+    expect(result.diagnostics[0]).toMatchObject({ severity: 'error', line: 2 })
+    expect(result.diagnostics[0].column).toEqual(expect.any(Number))
     expect(result.diagnostics[0].message).toContain('JSON')
   })
 

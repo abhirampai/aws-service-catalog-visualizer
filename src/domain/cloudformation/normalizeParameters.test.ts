@@ -67,6 +67,7 @@ describe('normalizeParameters', () => {
         defaultValue: ['us-east-1a'],
         required: false,
         allowedValues: undefined,
+        options: ['us-east-1a', 'us-east-1b', 'us-east-1c'],
         constraints: {},
       },
       {
@@ -89,6 +90,7 @@ describe('normalizeParameters', () => {
     const result = normalizeParameters({
       Parameters: {
         Flag: { Type: 'AWS::EC2::KeyPair::KeyName', Default: 'key' },
+        RequiredFlag: { Type: 'AWS::EC2::KeyPair::KeyName' },
         Structured: { Type: 'Custom::Thing', Default: { value: true } },
         UnsupportedList: { Type: 'List<String>', Default: ['one'] },
       },
@@ -97,10 +99,11 @@ describe('normalizeParameters', () => {
 
     expect(result.productName).toBe('ignored without description')
     expect(result.productDescription).toBe('Configure this product')
-    expect(result.definitions.map(({ name, type, defaultValue }) => ({ name, type, defaultValue }))).toEqual([
-      { name: 'Flag', type: 'AWS::EC2::KeyPair::KeyName', defaultValue: 'key' },
+    expect(result.definitions.map(({ name, type, defaultValue, required }) => ({ name, type, defaultValue, required }))).toEqual([
+      { name: 'Flag', type: 'AWS::EC2::KeyPair::KeyName', defaultValue: 'key', required: false },
+      { name: 'RequiredFlag', type: 'AWS::EC2::KeyPair::KeyName', defaultValue: undefined, required: true },
     ])
-    expect(result.warnings).toHaveLength(3)
+    expect(result.warnings).toHaveLength(4)
     expect(result.warnings.join(' ')).toContain('Structured')
     expect(result.warnings.join(' ')).toContain('UnsupportedList')
   })

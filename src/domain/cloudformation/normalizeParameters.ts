@@ -6,6 +6,8 @@ import type {
 } from './types'
 
 const supportedTypes = new Set(['String', 'Number', 'List<AWS::EC2::AvailabilityZone::Name>'])
+const availabilityZoneType = 'List<AWS::EC2::AvailabilityZone::Name>'
+export const LOCAL_AVAILABILITY_ZONES = ['us-east-1a', 'us-east-1b', 'us-east-1c'] as const
 
 function labelFor(name: string): string {
   return name
@@ -52,7 +54,8 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
       const supported = supportedTypes.has(type)
       const listType = type.startsWith('List<')
 
-      if (!supported && (!isScalar(defaultValue) || defaultValue === undefined)) {
+      const unsupportedListOrStructured = listType || (defaultValue !== undefined && !isScalar(defaultValue))
+      if (!supported && unsupportedListOrStructured) {
         warnings.push(`Parameter ${name} has an unsupported structured or list type and was omitted.`)
         continue
       }
@@ -72,6 +75,7 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
         allowedValues: Array.isArray(raw.AllowedValues) && raw.AllowedValues.every((item) => isScalar(item))
           ? raw.AllowedValues as Array<string | number>
           : undefined,
+        ...(type === availabilityZoneType ? { options: [...LOCAL_AVAILABILITY_ZONES] } : {}),
         constraints: constraintsFor(raw),
       }
 

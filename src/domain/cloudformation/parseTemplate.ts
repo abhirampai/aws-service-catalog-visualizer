@@ -19,6 +19,16 @@ function diagnosticFromError(error: unknown, fallbackMessage: string): ParseDiag
   }
 }
 
+function jsonLocation(source: string, error: unknown): Pick<ParseDiagnostic, 'line' | 'column'> {
+  const message = error instanceof Error ? error.message : ''
+  const positionMatch = message.match(/position\s+(\d+)/i)
+  const offset = positionMatch ? Number(positionMatch[1]) : source.length
+  const beforePosition = source.slice(0, Math.min(offset, source.length))
+  const line = beforePosition.split('\n').length
+  const lastNewline = beforePosition.lastIndexOf('\n')
+  return { line, column: offset - lastNewline }
+}
+
 export function parseTemplate(source: string): ParseResult {
   const trimmed = source.trim()
   if (!trimmed) {
@@ -36,6 +46,7 @@ export function parseTemplate(source: string): ParseResult {
     } catch (error) {
       const diagnostic = diagnosticFromError(error, 'Invalid JSON template.')
       diagnostic.message = `JSON parse error: ${diagnostic.message}`
+      Object.assign(diagnostic, jsonLocation(trimmed, error))
       return { diagnostics: [diagnostic] }
     }
   }

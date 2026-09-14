@@ -18,6 +18,7 @@ export interface ParameterDefinition {
   defaultValue?: string | number | string[]
   required: boolean
   allowedValues?: Array<string | number>
+  options?: string[]
   constraints: ParameterConstraints
 }
 
