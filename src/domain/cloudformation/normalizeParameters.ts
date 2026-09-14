@@ -52,7 +52,7 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
       const type = typeof raw.Type === 'string' ? raw.Type : 'String'
       const defaultValue = raw.Default
       const supported = supportedTypes.has(type)
-      const listType = type.startsWith('List<')
+      const listType = type === 'CommaDelimitedList' || type.startsWith('List<')
 
       const unsupportedListOrStructured = listType || (defaultValue !== undefined && !isScalar(defaultValue))
       if (!supported && unsupportedListOrStructured) {
@@ -63,19 +63,27 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
         warnings.push(`Parameter ${name} uses unsupported type ${type}; it is treated as text.`)
       }
 
+      const normalizedDefault = listType
+        ? (typeof defaultValue === 'string'
+            ? defaultValue.split(',').map((item) => item.trim()).filter(Boolean)
+            : Array.isArray(defaultValue) && defaultValue.every((item) => typeof item === 'string')
+              ? defaultValue
+              : undefined)
+        : isScalar(defaultValue) ? defaultValue : undefined
+
       const definition: ParameterDefinition = {
         name,
         label: labelFor(name),
         type,
         description: typeof raw.Description === 'string' ? raw.Description : undefined,
-        defaultValue: isScalar(defaultValue) || (listType && Array.isArray(defaultValue) && defaultValue.every((item) => typeof item === 'string'))
-          ? defaultValue as string | number | string[]
-          : undefined,
+        defaultValue: normalizedDefault,
         required: !Object.prototype.hasOwnProperty.call(raw, 'Default'),
         allowedValues: Array.isArray(raw.AllowedValues) && raw.AllowedValues.every((item) => isScalar(item))
           ? raw.AllowedValues as Array<string | number>
           : undefined,
-        ...(type === availabilityZoneType ? { options: [...LOCAL_AVAILABILITY_ZONES] } : {}),
+        ...(type === availabilityZoneType
+          ? { options: LOCAL_AVAILABILITY_ZONES.filter((zone) => !Array.isArray(raw.AllowedValues) || raw.AllowedValues.some((allowed) => String(allowed) === zone)) }
+          : {}),
         constraints: constraintsFor(raw),
       }
 

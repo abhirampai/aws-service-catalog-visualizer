@@ -14,7 +14,15 @@ interface ProvisioningFormProps {
 }
 
 function valuesFromDefinitions(definitions: ParameterDefinition[]): Record<string, unknown> {
-  return Object.fromEntries(definitions.filter((definition) => definition.defaultValue !== undefined).map((definition) => [definition.name, definition.defaultValue]))
+  return Object.fromEntries(definitions
+    .filter((definition) => definition.defaultValue !== undefined)
+    .map((definition) => {
+      const value = definition.defaultValue
+      const normalizedValue = definition.type === 'List<AWS::EC2::AvailabilityZone::Name>' && typeof value === 'string'
+        ? value.split(',').map((item) => item.trim()).filter(Boolean)
+        : value
+      return [definition.name, normalizedValue]
+    }))
 }
 
 export function ProvisioningForm({ definitions, warnings, onReview, productName = 'CloudFormation product', productDescription = 'Configure this product' }: ProvisioningFormProps) {

@@ -107,4 +107,35 @@ describe('normalizeParameters', () => {
     expect(result.warnings.join(' ')).toContain('Structured')
     expect(result.warnings.join(' ')).toContain('UnsupportedList')
   })
+
+  it('normalizes comma-delimited list defaults and filters availability-zone options', () => {
+    const result = normalizeParameters({
+      Parameters: {
+        AvailabilityZones: {
+          Type: 'List<AWS::EC2::AvailabilityZone::Name>',
+          Default: 'us-east-1a, us-east-1c',
+          AllowedValues: ['us-east-1a', 'us-east-1c'],
+        },
+      },
+    })
+
+    expect(result.definitions[0]).toMatchObject({
+      defaultValue: ['us-east-1a', 'us-east-1c'],
+      allowedValues: ['us-east-1a', 'us-east-1c'],
+      options: ['us-east-1a', 'us-east-1c'],
+    })
+  })
+
+  it('omits CommaDelimitedList parameters as unsupported list types', () => {
+    const result = normalizeParameters({
+      Parameters: {
+        Subnets: { Type: 'CommaDelimitedList', Default: 'subnet-a,subnet-b' },
+      },
+    })
+
+    expect(result.definitions).toEqual([])
+    expect(result.warnings).toEqual([
+      'Parameter Subnets has an unsupported structured or list type and was omitted.',
+    ])
+  })
 })

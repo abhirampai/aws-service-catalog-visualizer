@@ -37,7 +37,13 @@ export function validateValues(
         continue
       }
 
-      if (definition.options && value.some((item) => !definition.options?.includes(item))) {
+      if (definition.allowedValues && value.some((item) => !definition.allowedValues?.some((allowedValue) => matchesAllowedValue(item, allowedValue)))) {
+        errors[definition.name] = `Must be one of: ${definition.allowedValues.join(', ')}.`
+        continue
+      }
+
+      const availableOptions = definition.options
+      if (availableOptions && value.some((item) => !availableOptions.includes(item))) {
         errors[definition.name] = 'Select only available options.'
       }
       continue

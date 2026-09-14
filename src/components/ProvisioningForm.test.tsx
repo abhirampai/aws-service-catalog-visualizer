@@ -93,6 +93,25 @@ describe('ProvisioningForm', () => {
     expect(screen.getByRole('region', { name: 'Review payload' })).toHaveTextContent('us-east-1a')
   })
 
+  it('retains a comma-delimited list default in the control and review payload', async () => {
+    const user = userEvent.setup()
+    render(<ProvisioningForm definitions={[{
+      name: 'AvailabilityZones',
+      label: 'Availability Zones',
+      type: 'List<AWS::EC2::AvailabilityZone::Name>',
+      defaultValue: 'us-east-1a,us-east-1c',
+      required: false,
+      options: ['us-east-1a', 'us-east-1b', 'us-east-1c'],
+      constraints: {},
+    }]} warnings={[]} onReview={() => undefined} />)
+
+    expect(screen.getByLabelText('Availability Zones')).toHaveValue(['us-east-1a', 'us-east-1c'])
+    await user.click(screen.getByRole('button', { name: 'Review payload' }))
+
+    expect(screen.getByRole('region', { name: 'Review payload' })).toHaveTextContent('us-east-1a')
+    expect(screen.getByRole('region', { name: 'Review payload' })).toHaveTextContent('us-east-1c')
+  })
+
   it('blocks review for missing required values and shows a field error', async () => {
     const user = userEvent.setup()
     render(<ProvisioningForm definitions={definitions} warnings={[]} onReview={() => undefined} />)

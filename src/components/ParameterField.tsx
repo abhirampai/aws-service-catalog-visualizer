@@ -16,6 +16,11 @@ export function ParameterField({ definition, value, error, onChange }: Parameter
   const describedBy = [definition.description && descriptionId, error && errorId].filter(Boolean).join(' ') || undefined
   const isMultiSelect = definition.type === availabilityZoneType
   const options = definition.options ?? definition.allowedValues?.map(String)
+  const selectedValues = Array.isArray(value)
+    ? value.map(String)
+    : typeof value === 'string'
+      ? value.split(',').map((item) => item.trim()).filter(Boolean)
+      : []
   const commonProps = { id: inputId, name: definition.name, 'aria-label': definition.label, 'aria-describedby': describedBy, 'aria-invalid': Boolean(error) }
 
   return (
@@ -28,7 +33,7 @@ export function ParameterField({ definition, value, error, onChange }: Parameter
         <select
           {...commonProps}
           multiple
-          value={Array.isArray(value) ? value.map(String) : []}
+          value={selectedValues}
           onChange={(event) => onChange(Array.from(event.target.selectedOptions, (option) => option.value))}
         >
           {options?.map((option) => <option key={String(option)} value={String(option)}>{String(option)}</option>)}

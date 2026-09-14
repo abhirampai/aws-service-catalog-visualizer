@@ -94,6 +94,24 @@ describe('validateValues', () => {
     })
   })
 
+  it('rejects availability zones outside AllowedValues', () => {
+    const definition: ParameterDefinition = {
+      name: 'AvailabilityZones',
+      label: 'Availability Zones',
+      type: 'List<AWS::EC2::AvailabilityZone::Name>',
+      required: true,
+      options: ['us-east-1a', 'us-east-1b', 'us-east-1c'],
+      allowedValues: ['us-east-1a', 'us-east-1b'],
+      constraints: {},
+    }
+
+    expect(validateValues([definition], {
+      AvailabilityZones: ['us-east-1a', 'us-east-1c'],
+    })).toEqual({
+      AvailabilityZones: 'Must be one of: us-east-1a, us-east-1b.',
+    })
+  })
+
   it('accepts valid scalar, constrained, and multi-value inputs', () => {
     const definitions: ParameterDefinition[] = [
       stringDefinition({
