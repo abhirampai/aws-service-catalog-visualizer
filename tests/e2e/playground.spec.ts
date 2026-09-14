@@ -39,10 +39,12 @@ test('loads, edits, validates, and reviews a local provisioning workflow', async
   await page.goto('/')
 
   await page.getByRole('button', { name: 'Load sample' }).click()
+  await expect(page.getByLabel('Application name')).toBeVisible()
   await replaceEditorContents(page, editableTemplate)
 
   await expect(page.getByLabel('Owner name')).toBeVisible()
   await page.getByLabel('Owner name').fill('Abhiram')
+  await expect(page.getByLabel('Owner name')).toHaveValue('Abhiram')
   await page.getByLabel('Availability zones').selectOption(['us-east-1a', 'us-east-1b'])
   await page.getByRole('button', { name: 'Review payload' }).click()
 
@@ -55,6 +57,7 @@ test('loads, edits, validates, and reviews a local provisioning workflow', async
   await expect(page.getByRole('heading', { name: 'Diagnostics' })).toBeVisible()
   await expect(page.getByText(/Error:/)).toBeVisible()
   await expect(page.getByLabel('Owner name')).toBeVisible()
+  await expect(page.getByLabel('Owner name')).toHaveValue('Abhiram')
 })
 
 test('stacks the editor and preview panes on a narrow viewport', async ({ page }) => {
