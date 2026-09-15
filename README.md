@@ -54,7 +54,7 @@ responsive stacked layout.
 
 The editor accepts CloudFormation YAML and JSON documents. The preview uses
 `Parameters` definitions and also interprets `Resources` references where
-supported. Supported parameter behavior is:
+supported. Supported parameter and output behavior is:
 
 - `String`, including `Default`, `Description`, `AllowedValues`, `MinLength`,
   `MaxLength`, and `AllowedPattern`.
@@ -66,6 +66,9 @@ supported. Supported parameter behavior is:
 - Resource `Ref` values are interpreted locally. If a resource references a
   non-pseudo parameter name that is missing from `Parameters`, the preview adds
   a required text field for that name and shows a warning.
+- `Outputs` values render in the preview with optional descriptions. Literal
+  scalar values are shown directly, and direct `Ref` values use the current
+  local preview value when available.
 
 Availability zones use the fixed local examples `us-east-1a`, `us-east-1b`,
 and `us-east-1c`. They are not fetched from AWS. Parameters without defaults
@@ -82,6 +85,10 @@ Metadata:
 
 Without those keys, the playground uses the generic product name and
 description shown in the form.
+
+Unsupported output expressions such as `Fn::GetAtt`, `Fn::Sub`, and unresolved
+AWS-managed values are shown clearly as unsupported local preview values rather
+than being sent anywhere or treated as real AWS results.
 
 ## Local-Only Behavior
 

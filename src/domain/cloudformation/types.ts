@@ -22,6 +22,15 @@ export interface ParameterDefinition {
   constraints: ParameterConstraints
 }
 
+export interface OutputDefinition {
+  name: string
+  description?: string
+  kind: 'literal' | 'ref' | 'unsupported'
+  value?: string | number
+  referenceName?: string
+  expression?: string
+}
+
 export interface ParseDiagnostic {
   message: string
   line?: number
@@ -36,6 +45,7 @@ export interface ParseResult {
 
 export interface NormalizationResult {
   definitions: ParameterDefinition[]
+  outputs: OutputDefinition[]
   warnings: string[]
   productName: string
   productDescription: string
