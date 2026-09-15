@@ -31,6 +31,18 @@ export interface OutputDefinition {
   expression?: string
 }
 
+export interface RuleAssertionDefinition {
+  assert: unknown
+  description?: string
+  parameterNames: string[]
+}
+
+export interface RuleDefinition {
+  name: string
+  condition?: unknown
+  assertions: RuleAssertionDefinition[]
+}
+
 export interface ParseDiagnostic {
   message: string
   line?: number
@@ -45,6 +57,7 @@ export interface ParseResult {
 
 export interface NormalizationResult {
   definitions: ParameterDefinition[]
+  rules: RuleDefinition[]
   outputs: OutputDefinition[]
   warnings: string[]
   productName: string

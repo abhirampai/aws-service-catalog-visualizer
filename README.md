@@ -63,6 +63,9 @@ supported. Supported parameter and output behavior is:
 - `List<AWS::EC2::AvailabilityZone::Name>` with multiple selection.
 - `Mappings` lookups used by parameter defaults through `Fn::FindInMap` and
   `Ref`, when they resolve to scalar values.
+- `Rules` assertions that use local parameter values with `Fn::And`,
+  `Fn::Or`, `Fn::Not`, `Fn::Equals`, `Fn::Contains`, `Fn::EachMemberEquals`,
+  and `Fn::EachMemberIn`. Failed assertions are shown beside affected fields.
 - Resource `Ref` values are interpreted locally. If a resource references a
   non-pseudo parameter name that is missing from `Parameters`, the preview adds
   a required text field for that name and shows a warning.
@@ -99,7 +102,6 @@ are not persisted.
 
 ## Roadmap
 
-- [Support CloudFormation Rules](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/3)
 - [Support CloudFormation Conditions](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/5)
 - [Support CloudFormation Hooks](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/6)
 - [Support CloudFormation Dynamic References](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/7)

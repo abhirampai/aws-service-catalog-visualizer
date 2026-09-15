@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import App from '../App'
-import type { OutputDefinition, ParameterDefinition } from '../domain/cloudformation/types'
+import type { OutputDefinition, ParameterDefinition, RuleDefinition } from '../domain/cloudformation/types'
 import { SAMPLE_TEMPLATE, TemplateEditor } from './TemplateEditor'
 import { ProvisioningForm, reconcileValuesFromDefinitions } from './ProvisioningForm'
 
@@ -66,9 +66,27 @@ const outputs: OutputDefinition[] = [
   },
 ]
 
+const rules: RuleDefinition[] = [
+  {
+    name: 'ProdNeedsTwoInstances',
+    assertions: [
+      {
+        assert: {
+          'Fn::Or': [
+            { 'Fn::Not': [{ 'Fn::Equals': [{ Ref: 'Environment' }, 'prod'] }] },
+            { 'Fn::Equals': [{ Ref: 'InstanceCount' }, 2] },
+          ],
+        },
+        description: 'Production requires two instances.',
+        parameterNames: ['Environment', 'InstanceCount'],
+      },
+    ],
+  },
+]
+
 describe('ProvisioningForm', () => {
   it('renders parameter controls, defaults, descriptions, and local zone choices', () => {
-    render(<ProvisioningForm definitions={definitions} outputs={[]} warnings={[]} onReview={() => undefined} />)
+    render(<ProvisioningForm definitions={definitions} rules={[]} outputs={[]} warnings={[]} onReview={() => undefined} />)
 
     expect(screen.getByLabelText('Project Name')).toBeInTheDocument()
     expect(screen.getByText('Name shown to operators.')).toBeInTheDocument()
@@ -88,6 +106,7 @@ describe('ProvisioningForm', () => {
     const { rerender } = render(
       <ProvisioningForm
         definitions={[]}
+        rules={[]}
         outputs={[]}
         warnings={[]}
         onReview={() => undefined}
@@ -99,14 +118,14 @@ describe('ProvisioningForm', () => {
     expect(screen.getByRole('heading', { name: 'Metadata product' })).toBeInTheDocument()
     expect(screen.getByText('Metadata description')).toBeInTheDocument()
 
-    rerender(<ProvisioningForm definitions={[]} outputs={[]} warnings={[]} onReview={() => undefined} />)
+    rerender(<ProvisioningForm definitions={[]} rules={[]} outputs={[]} warnings={[]} onReview={() => undefined} />)
     expect(screen.getByRole('heading', { name: 'CloudFormation product' })).toBeInTheDocument()
     expect(screen.getByText('Configure this product')).toBeInTheDocument()
   })
 
   it('updates field values and only shows a payload after valid review', async () => {
     const user = userEvent.setup()
-    render(<ProvisioningForm definitions={definitions} outputs={[]} warnings={['Unsupported parameter omitted.']} onReview={() => undefined} />)
+    render(<ProvisioningForm definitions={definitions} rules={[]} outputs={[]} warnings={['Unsupported parameter omitted.']} onReview={() => undefined} />)
 
     await user.type(screen.getByLabelText('Project Name'), 'catalog-demo')
     await user.selectOptions(screen.getByLabelText('Availability Zones'), ['us-east-1a', 'us-east-1b'])
@@ -128,7 +147,7 @@ describe('ProvisioningForm', () => {
       required: false,
       options: ['us-east-1a', 'us-east-1b', 'us-east-1c'],
       constraints: {},
-    }]} outputs={[]} warnings={[]} onReview={() => undefined} />)
+    }]} rules={[]} outputs={[]} warnings={[]} onReview={() => undefined} />)
 
     expect(screen.getByLabelText('Availability Zones')).toHaveValue(['us-east-1a', 'us-east-1c'])
     await user.click(screen.getByRole('button', { name: 'Review payload' }))
@@ -139,7 +158,7 @@ describe('ProvisioningForm', () => {
 
   it('blocks review for missing required values and shows a field error', async () => {
     const user = userEvent.setup()
-    render(<ProvisioningForm definitions={definitions} outputs={[]} warnings={[]} onReview={() => undefined} />)
+    render(<ProvisioningForm definitions={definitions} rules={[]} outputs={[]} warnings={[]} onReview={() => undefined} />)
 
     await user.click(screen.getByRole('button', { name: 'Review payload' }))
 
@@ -149,7 +168,7 @@ describe('ProvisioningForm', () => {
 
   it('preserves entered values while adding fields and refreshing untouched defaults', async () => {
     const user = userEvent.setup()
-    const { rerender } = render(<ProvisioningForm definitions={definitions.slice(0, 3)} outputs={[]} warnings={[]} onReview={() => undefined} />)
+    const { rerender } = render(<ProvisioningForm definitions={definitions.slice(0, 3)} rules={[]} outputs={[]} warnings={[]} onReview={() => undefined} />)
 
     await user.clear(screen.getByLabelText('Project Name'))
     await user.type(screen.getByLabelText('Project Name'), 'catalog-demo')
@@ -170,6 +189,7 @@ describe('ProvisioningForm', () => {
             constraints: { minLength: 3 },
           },
         ]}
+        rules={[]}
         outputs={[]}
         warnings={[]}
         onReview={() => undefined}
@@ -183,7 +203,7 @@ describe('ProvisioningForm', () => {
 
   it('renders CloudFormation outputs with live Ref values, descriptions, and unsupported expressions', async () => {
     const user = userEvent.setup()
-    render(<ProvisioningForm definitions={definitions} outputs={outputs} warnings={[]} onReview={() => undefined} />)
+    render(<ProvisioningForm definitions={definitions} rules={[]} outputs={outputs} warnings={[]} onReview={() => undefined} />)
 
     const outputRegion = screen.getByRole('region', { name: 'CloudFormation outputs' })
     expect(outputRegion).toHaveTextContent('Echoes the selected application name.')
@@ -194,6 +214,68 @@ describe('ProvisioningForm', () => {
 
     await user.type(screen.getByLabelText('Project Name'), 'catalog-demo')
     expect(outputRegion).toHaveTextContent('catalog-demo')
+  })
+
+  it('shows CloudFormation rule failures beside affected fields', async () => {
+    const user = userEvent.setup()
+    render(<ProvisioningForm definitions={definitions} rules={rules} outputs={[]} warnings={[]} onReview={() => undefined} />)
+
+    await user.selectOptions(screen.getByLabelText('Environment'), 'prod')
+    await user.clear(screen.getByLabelText('Project Name'))
+    await user.type(screen.getByLabelText('Project Name'), 'catalog-demo')
+    await user.clear(screen.getByLabelText('Instance Count'))
+    await user.type(screen.getByLabelText('Instance Count'), '1')
+    await user.selectOptions(screen.getByLabelText('Availability Zones'), ['us-east-1a'])
+    await user.click(screen.getByRole('button', { name: 'Review payload' }))
+
+    expect(screen.getAllByText('Production requires two instances.')).toHaveLength(2)
+    expect(screen.queryByRole('heading', { name: 'Review payload' })).not.toBeInTheDocument()
+  })
+
+  it('resets validation state when rules change without parameter changes', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<ProvisioningForm definitions={definitions} rules={rules} outputs={[]} warnings={[]} onReview={() => undefined} />)
+
+    await user.selectOptions(screen.getByLabelText('Environment'), 'prod')
+    await user.type(screen.getByLabelText('Project Name'), 'catalog-demo')
+    await user.clear(screen.getByLabelText('Instance Count'))
+    await user.type(screen.getByLabelText('Instance Count'), '1')
+    await user.selectOptions(screen.getByLabelText('Availability Zones'), ['us-east-1a'])
+    await user.click(screen.getByRole('button', { name: 'Review payload' }))
+    expect(screen.getAllByText('Production requires two instances.')).toHaveLength(2)
+
+    await user.clear(screen.getByLabelText('Instance Count'))
+    await user.type(screen.getByLabelText('Instance Count'), '2')
+    await user.click(screen.getByRole('button', { name: 'Review payload' }))
+    expect(screen.getByRole('heading', { name: 'Review payload' })).toBeInTheDocument()
+
+    rerender(
+      <ProvisioningForm
+        definitions={definitions}
+        rules={[{
+          name: 'ProdNeedsThreeInstances',
+          assertions: [
+            {
+              assert: {
+                'Fn::Or': [
+                  { 'Fn::Not': [{ 'Fn::Equals': [{ Ref: 'Environment' }, 'prod'] }] },
+                  { 'Fn::Equals': [{ Ref: 'InstanceCount' }, 3] },
+                ],
+              },
+              description: 'Production requires three instances.',
+              parameterNames: ['Environment', 'InstanceCount'],
+            },
+          ],
+        }]}
+        outputs={[]}
+        warnings={[]}
+        onReview={() => undefined}
+      />,
+    )
+
+    expect(screen.queryByRole('heading', { name: 'Review payload' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Production requires two instances.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Production requires three instances.')).not.toBeInTheDocument()
   })
 })
 

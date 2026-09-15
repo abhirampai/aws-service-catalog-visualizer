@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { OutputDefinition, ParameterDefinition } from '../domain/cloudformation/types'
+import type { OutputDefinition, ParameterDefinition, RuleDefinition } from '../domain/cloudformation/types'
 import { createPayload } from '../domain/provisioning/createPayload'
 import { validateValues, type FieldErrors } from '../domain/provisioning/validateValues'
 import { ParameterField } from './ParameterField'
@@ -7,6 +7,7 @@ import { ReviewPayload } from './ReviewPayload'
 
 interface ProvisioningFormProps {
   definitions: ParameterDefinition[]
+  rules: RuleDefinition[]
   outputs: OutputDefinition[]
   warnings: string[]
   onReview: (payload: Record<string, string | string[]>) => void
@@ -109,12 +110,12 @@ export function reconcileValuesFromDefinitions(
   }))
 }
 
-export function ProvisioningForm({ definitions, outputs, warnings, onReview, productName = 'CloudFormation product', productDescription = 'Configure this product' }: ProvisioningFormProps) {
+export function ProvisioningForm({ definitions, rules, outputs, warnings, onReview, productName = 'CloudFormation product', productDescription = 'Configure this product' }: ProvisioningFormProps) {
   const [values, setValues] = useState<Record<string, unknown>>(() => valuesFromDefinitions(definitions))
   const [errors, setErrors] = useState<FieldErrors>({})
   const [payload, setPayload] = useState<Record<string, string | string[]> | null>(null)
   const previousDefinitionsRef = useRef(definitions)
-  const definitionsSignature = JSON.stringify(definitions)
+  const modelSignature = JSON.stringify({ definitions, rules })
   const definitionNames = new Set(definitions.map((definition) => definition.name))
 
   useEffect(() => {
@@ -122,7 +123,7 @@ export function ProvisioningForm({ definitions, outputs, warnings, onReview, pro
     setErrors({})
     setPayload(null)
     previousDefinitionsRef.current = definitions
-  }, [definitionsSignature])
+  }, [modelSignature, definitions])
 
   const updateValue = (name: string, value: string | string[]) => {
     setValues((current) => ({ ...current, [name]: value }))
@@ -131,7 +132,7 @@ export function ProvisioningForm({ definitions, outputs, warnings, onReview, pro
   }
 
   const review = () => {
-    const nextErrors = validateValues(definitions, values)
+    const nextErrors = validateValues(definitions, values, rules)
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length > 0) {
       setPayload(null)
