@@ -66,6 +66,10 @@ supported. Supported parameter and output behavior is:
 - `Rules` assertions that use local parameter values with `Fn::And`,
   `Fn::Or`, `Fn::Not`, `Fn::Equals`, `Fn::Contains`, `Fn::EachMemberEquals`,
   and `Fn::EachMemberIn`. Failed assertions are shown beside affected fields.
+- Template `Conditions` expressions that use `Ref`, `Condition`, `Fn::And`,
+  `Fn::Or`, `Fn::Not`, and `Fn::Equals` are evaluated when referenced by
+  `Rules` conditions. Unsupported condition expressions are surfaced as
+  diagnostics and treated as unknown during local rule evaluation.
 - Resource `Ref` values are interpreted locally. If a resource references a
   non-pseudo parameter name that is missing from `Parameters`, the preview adds
   a required text field for that name and shows a warning.

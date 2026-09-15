@@ -58,6 +58,7 @@ export interface ParseResult {
 export interface NormalizationResult {
   definitions: ParameterDefinition[]
   rules: RuleDefinition[]
+  conditions: Record<string, unknown>
   outputs: OutputDefinition[]
   warnings: string[]
   productName: string

@@ -205,6 +205,65 @@ describe('validateValues', () => {
     expect(validateValues(definitions, { Environment: 'dev' }, rules)).toEqual({})
   })
 
+  it('evaluates rule conditions that reference named template Conditions', () => {
+    const definitions: ParameterDefinition[] = [
+      stringDefinition({ name: 'Environment', label: 'Environment', required: true }),
+      {
+        name: 'InstanceCount',
+        label: 'Instance Count',
+        type: 'Number',
+        required: true,
+        constraints: {},
+      },
+    ]
+    const conditions = {
+      IsProd: { 'Fn::Equals': [{ Ref: 'Environment' }, 'prod'] },
+    }
+    const rules: RuleDefinition[] = [
+      {
+        name: 'ProdNeedsTwoInstances',
+        condition: { Condition: 'IsProd' },
+        assertions: [
+          {
+            assert: { 'Fn::Equals': [{ Ref: 'InstanceCount' }, 2] },
+            description: 'Production requires two instances.',
+            parameterNames: ['Environment', 'InstanceCount'],
+          },
+        ],
+      },
+    ]
+
+    expect(validateValues(definitions, { Environment: 'dev', InstanceCount: '1' }, rules, conditions)).toEqual({})
+    expect(validateValues(definitions, { Environment: 'prod', InstanceCount: '1' }, rules, conditions)).toEqual({
+      Environment: 'Production requires two instances.',
+      InstanceCount: 'Production requires two instances.',
+    })
+  })
+
+  it('treats unsupported named template Conditions as unknown', () => {
+    const definitions = [stringDefinition({ name: 'Environment', label: 'Environment', required: true })]
+    const conditions = {
+      UnsupportedCheck: { 'Fn::ValueOfAll': ['AWS::EC2::VPC::Id', 'Tags.Owner'] },
+    }
+    const rules: RuleDefinition[] = [
+      {
+        name: 'UnknownConditionFallsBackToAssertion',
+        condition: { Condition: 'UnsupportedCheck' },
+        assertions: [
+          {
+            assert: { 'Fn::Equals': [{ Ref: 'Environment' }, 'prod'] },
+            description: 'Environment must be prod.',
+            parameterNames: ['Environment'],
+          },
+        ],
+      },
+    ]
+
+    expect(validateValues(definitions, { Environment: 'dev' }, rules, conditions)).toEqual({
+      Environment: 'Environment must be prod.',
+    })
+  })
+
   it('still evaluates assertions when a rule condition is unsupported locally', () => {
     const definitions = [stringDefinition({ name: 'Environment', label: 'Environment', required: true })]
     const rules: RuleDefinition[] = [

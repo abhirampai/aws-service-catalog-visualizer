@@ -313,6 +313,44 @@ describe('App', () => {
     expect(screen.getByLabelText('Application Name')).toBeInTheDocument()
   })
 
+  it('shows unsupported template condition diagnostics and evaluates named conditions in rules', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const editor = screen.getByRole('textbox', { name: 'CloudFormation template' })
+    const source = `${SAMPLE_TEMPLATE}Conditions:
+  IsProd:
+    Fn::Equals: [!Ref Environment, prod]
+  UsesVpcTagLookup:
+    Fn::ValueOfAll: [AWS::EC2::VPC::Id, Tags.Owner]
+Rules:
+  ProdNeedsTwoInstances:
+    RuleCondition:
+      Condition: IsProd
+    Assertions:
+      - Assert:
+          Fn::Equals: [!Ref InstanceCount, 2]
+        AssertDescription: Production requires two instances.
+`
+
+    await user.click(editor)
+    await user.keyboard('{Control>}a{/Control}')
+    await user.keyboard('{Backspace}')
+    fireEvent.paste(editor, { clipboardData: { getData: () => source } })
+
+    await waitFor(() => expect(screen.getByRole('complementary', { name: 'Template diagnostics' })).toHaveTextContent('Condition UsesVpcTagLookup uses unsupported expression Fn::ValueOfAll'))
+
+    await user.selectOptions(screen.getByLabelText('Environment'), 'prod')
+    await user.clear(screen.getByLabelText('Application Name'))
+    await user.type(screen.getByLabelText('Application Name'), 'catalog-demo')
+    await user.clear(screen.getByLabelText('Instance Count'))
+    await user.type(screen.getByLabelText('Instance Count'), '1')
+    await user.selectOptions(screen.getByLabelText('Availability Zones'), ['us-east-1a'])
+    await user.click(screen.getByRole('button', { name: 'Review payload' }))
+
+    expect(screen.getAllByText('Production requires two instances.')).toHaveLength(2)
+    expect(screen.queryByRole('heading', { name: 'Review payload' })).not.toBeInTheDocument()
+  })
+
   it('updates the preview live for valid template edits without wiping preserved field values', async () => {
     const user = userEvent.setup()
     render(<App />)

@@ -350,4 +350,27 @@ describe('normalizeParameters', () => {
       },
     ])
   })
+
+  it('collects template Conditions and warns for unsupported condition expressions', () => {
+    const result = normalizeParameters({
+      Parameters: {
+        Environment: { Type: 'String', Default: 'dev' },
+      },
+      Conditions: {
+        IsProd: { 'Fn::Equals': [{ Ref: 'Environment' }, 'prod'] },
+        UsesVpcTagLookup: { 'Fn::ValueOfAll': ['AWS::EC2::VPC::Id', 'Tags.Owner'] },
+        MalformedRefCondition: { Ref: 'Environment', Extra: true },
+      },
+    })
+
+    expect(result.conditions).toEqual({
+      IsProd: { 'Fn::Equals': [{ Ref: 'Environment' }, 'prod'] },
+      UsesVpcTagLookup: { 'Fn::ValueOfAll': ['AWS::EC2::VPC::Id', 'Tags.Owner'] },
+      MalformedRefCondition: { Ref: 'Environment', Extra: true },
+    })
+    expect(result.warnings).toEqual([
+      'Condition UsesVpcTagLookup uses unsupported expression Fn::ValueOfAll and cannot be evaluated in local preview.',
+      'Condition MalformedRefCondition uses unsupported expression an unsupported expression and cannot be evaluated in local preview.',
+    ])
+  })
 })
