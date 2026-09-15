@@ -8,6 +8,7 @@ import { ReviewPayload } from './ReviewPayload'
 interface ProvisioningFormProps {
   definitions: ParameterDefinition[]
   rules: RuleDefinition[]
+  conditions?: Record<string, unknown>
   outputs: OutputDefinition[]
   warnings: string[]
   onReview: (payload: Record<string, string | string[]>) => void
@@ -110,7 +111,7 @@ export function reconcileValuesFromDefinitions(
   }))
 }
 
-export function ProvisioningForm({ definitions, rules, outputs, warnings, onReview, productName = 'CloudFormation product', productDescription = 'Configure this product' }: ProvisioningFormProps) {
+export function ProvisioningForm({ definitions, rules, conditions = {}, outputs, warnings, onReview, productName = 'CloudFormation product', productDescription = 'Configure this product' }: ProvisioningFormProps) {
   const [values, setValues] = useState<Record<string, unknown>>(() => valuesFromDefinitions(definitions))
   const [errors, setErrors] = useState<FieldErrors>({})
   const [payload, setPayload] = useState<Record<string, string | string[]> | null>(null)
@@ -132,7 +133,7 @@ export function ProvisioningForm({ definitions, rules, outputs, warnings, onRevi
   }
 
   const review = () => {
-    const nextErrors = validateValues(definitions, values, rules)
+    const nextErrors = validateValues(definitions, values, rules, conditions)
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length > 0) {
       setPayload(null)

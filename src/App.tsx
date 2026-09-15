@@ -12,7 +12,7 @@ function initialModel(): { source: string; model: NormalizationResult; diagnosti
   const result = parseTemplate(source)
   return {
     source,
-    model: result.document ? normalizeParameters(result.document) : { definitions: [], rules: [], outputs: [], warnings: [], productName: 'CloudFormation product', productDescription: 'Configure this product' },
+    model: result.document ? normalizeParameters(result.document) : { definitions: [], rules: [], conditions: {}, outputs: [], warnings: [], productName: 'CloudFormation product', productDescription: 'Configure this product' },
     diagnostics: result.diagnostics,
   }
 }
@@ -49,7 +49,7 @@ function App() {
         </section>
         <section className="workspace-panel preview-panel" aria-labelledby="provisioning-preview-heading">
           <h2 id="provisioning-preview-heading">Provisioning preview</h2>
-          <ProvisioningForm definitions={model.definitions} rules={model.rules} outputs={model.outputs} warnings={model.warnings} productName={model.productName} productDescription={model.productDescription} onReview={() => undefined} />
+          <ProvisioningForm definitions={model.definitions} rules={model.rules} conditions={model.conditions} outputs={model.outputs} warnings={model.warnings} productName={model.productName} productDescription={model.productDescription} onReview={() => undefined} />
         </section>
       </div>
     </main>

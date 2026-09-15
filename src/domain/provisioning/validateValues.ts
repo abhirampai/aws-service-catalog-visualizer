@@ -33,13 +33,26 @@ function listFrom(value: unknown): unknown[] | undefined {
   return undefined
 }
 
-function evaluateBoolean(expression: unknown, values: Record<string, unknown>): boolean | undefined {
-  const result = evaluateValue(expression, values)
-  return typeof result === 'boolean' ? result : undefined
-}
+function evaluateValue(
+  expression: unknown,
+  values: Record<string, unknown>,
+  conditions: Record<string, unknown>,
+  cache: Map<string, boolean | undefined> = new Map(),
+  resolving: Set<string> = new Set(),
+): unknown {
+  const evaluateCondition = (conditionName: string): boolean | undefined => {
+    if (cache.has(conditionName)) return cache.get(conditionName)
+    if (resolving.has(conditionName)) return undefined
+    const conditionExpression = conditions[conditionName]
+    if (conditionExpression === undefined) return undefined
+    resolving.add(conditionName)
+    const result = evaluateBoolean(conditionExpression, values, conditions, cache, resolving)
+    resolving.delete(conditionName)
+    cache.set(conditionName, result)
+    return result
+  }
 
-function evaluateValue(expression: unknown, values: Record<string, unknown>): unknown {
-  if (Array.isArray(expression)) return expression.map((item) => evaluateValue(item, values))
+  if (Array.isArray(expression)) return expression.map((item) => evaluateValue(item, values, conditions, cache, resolving))
   if (!expression || typeof expression !== 'object') return expression
 
   const record = expression as Record<string, unknown>
@@ -47,19 +60,25 @@ function evaluateValue(expression: unknown, values: Record<string, unknown>): un
   if (typeof record.Ref === 'string') {
     return values[record.Ref]
   }
+  if (typeof record.Condition === 'string') {
+    return evaluateCondition(record.Condition)
+  }
 
   if (Object.keys(record).length !== 1) return undefined
 
   if (record['Fn::Equals'] !== undefined) {
     const args = record['Fn::Equals']
     if (!Array.isArray(args) || args.length !== 2) return undefined
-    return valuesEqual(evaluateValue(args[0], values), evaluateValue(args[1], values))
+    return valuesEqual(
+      evaluateValue(args[0], values, conditions, cache, resolving),
+      evaluateValue(args[1], values, conditions, cache, resolving),
+    )
   }
 
   if (record['Fn::Not'] !== undefined) {
     const args = record['Fn::Not']
     if (!Array.isArray(args) || args.length !== 1) return undefined
-    const value = evaluateBoolean(args[0], values)
+    const value = evaluateBoolean(args[0], values, conditions, cache, resolving)
     return value === undefined ? undefined : !value
   }
 
@@ -68,7 +87,7 @@ function evaluateValue(expression: unknown, values: Record<string, unknown>): un
     if (!Array.isArray(args) || args.length < 2 || args.length > 10) return undefined
     let hasUnknown = false
     for (const item of args) {
-      const value = evaluateBoolean(item, values)
+      const value = evaluateBoolean(item, values, conditions, cache, resolving)
       if (value === false) return false
       if (value === undefined) hasUnknown = true
     }
@@ -80,7 +99,7 @@ function evaluateValue(expression: unknown, values: Record<string, unknown>): un
     if (!Array.isArray(args) || args.length < 2 || args.length > 10) return undefined
     let hasUnknown = false
     for (const item of args) {
-      const value = evaluateBoolean(item, values)
+      const value = evaluateBoolean(item, values, conditions, cache, resolving)
       if (value === true) return true
       if (value === undefined) hasUnknown = true
     }
@@ -90,31 +109,42 @@ function evaluateValue(expression: unknown, values: Record<string, unknown>): un
   if (record['Fn::Contains'] !== undefined) {
     const args = record['Fn::Contains']
     if (!Array.isArray(args) || args.length !== 2) return undefined
-    const list = listFrom(evaluateValue(args[0], values))
+    const list = listFrom(evaluateValue(args[0], values, conditions, cache, resolving))
     if (!list) return undefined
-    const target = evaluateValue(args[1], values)
+    const target = evaluateValue(args[1], values, conditions, cache, resolving)
     return list.some((item) => valuesEqual(item, target))
   }
 
   if (record['Fn::EachMemberEquals'] !== undefined) {
     const args = record['Fn::EachMemberEquals']
     if (!Array.isArray(args) || args.length !== 2) return undefined
-    const list = listFrom(evaluateValue(args[0], values))
+    const list = listFrom(evaluateValue(args[0], values, conditions, cache, resolving))
     if (!list) return undefined
-    const target = evaluateValue(args[1], values)
+    const target = evaluateValue(args[1], values, conditions, cache, resolving)
     return list.every((item) => valuesEqual(item, target))
   }
 
   if (record['Fn::EachMemberIn'] !== undefined) {
     const args = record['Fn::EachMemberIn']
     if (!Array.isArray(args) || args.length !== 2) return undefined
-    const candidates = listFrom(evaluateValue(args[0], values))
-    const allowed = listFrom(evaluateValue(args[1], values))
+    const candidates = listFrom(evaluateValue(args[0], values, conditions, cache, resolving))
+    const allowed = listFrom(evaluateValue(args[1], values, conditions, cache, resolving))
     if (!candidates || !allowed) return undefined
     return candidates.every((candidate) => allowed.some((item) => valuesEqual(item, candidate)))
   }
 
   return undefined
+}
+
+function evaluateBoolean(
+  expression: unknown,
+  values: Record<string, unknown>,
+  conditions: Record<string, unknown>,
+  cache: Map<string, boolean | undefined> = new Map(),
+  resolving: Set<string> = new Set(),
+): boolean | undefined {
+  const result = evaluateValue(expression, values, conditions, cache, resolving)
+  return typeof result === 'boolean' ? result : undefined
 }
 
 function addError(errors: FieldErrors, name: string, message: string) {
@@ -132,6 +162,7 @@ function evaluateRules(
   definitions: ParameterDefinition[],
   rules: RuleDefinition[],
   values: Record<string, unknown>,
+  conditions: Record<string, unknown>,
   errors: FieldErrors,
 ) {
   const ruleValues: Record<string, unknown> = { ...values }
@@ -155,10 +186,10 @@ function evaluateRules(
   const definitionNames = new Set(definitions.map((definition) => definition.name))
 
   for (const rule of rules) {
-    if (rule.condition !== undefined && evaluateValue(rule.condition, ruleValues) === false) continue
+    if (rule.condition !== undefined && evaluateValue(rule.condition, ruleValues, conditions) === false) continue
 
     for (const assertion of rule.assertions) {
-      const matches = evaluateValue(assertion.assert, ruleValues)
+      const matches = evaluateValue(assertion.assert, ruleValues, conditions)
       if (matches !== false) continue
 
       const message = assertion.description || `Rule ${rule.name} assertion failed.`
@@ -173,6 +204,7 @@ export function validateValues(
   definitions: ParameterDefinition[],
   values: Record<string, unknown>,
   rules: RuleDefinition[] = [],
+  conditions: Record<string, unknown> = {},
 ): FieldErrors {
   const errors: FieldErrors = {}
 
@@ -246,7 +278,7 @@ export function validateValues(
     }
   }
 
-  evaluateRules(definitions, rules, values, errors)
+  evaluateRules(definitions, rules, values, conditions, errors)
 
   return errors
 }

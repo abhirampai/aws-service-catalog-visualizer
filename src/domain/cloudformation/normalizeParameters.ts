@@ -9,6 +9,7 @@ import type {
 
 const supportedTypes = new Set(['String', 'Number', 'List<AWS::EC2::AvailabilityZone::Name>'])
 const availabilityZoneType = 'List<AWS::EC2::AvailabilityZone::Name>'
+const supportedConditionFunctions = new Set(['Fn::And', 'Fn::Or', 'Fn::Not', 'Fn::Equals'])
 export const LOCAL_AVAILABILITY_ZONES = ['us-east-1a', 'us-east-1b', 'us-east-1c'] as const
 
 function labelFor(name: string): string {
@@ -145,12 +146,70 @@ function collectRefs(value: unknown, refs: Set<string>) {
   for (const entry of Object.values(record)) collectRefs(entry, refs)
 }
 
+function collectRuleConditionRefs(
+  value: unknown,
+  conditions: Record<string, unknown>,
+  refs: Set<string>,
+  resolvingConditions: Set<string> = new Set(),
+) {
+  collectRefs(value, refs)
+  if (Array.isArray(value)) {
+    for (const item of value) collectRuleConditionRefs(item, conditions, refs, resolvingConditions)
+    return
+  }
+  const record = asRecord(value)
+  const conditionName = typeof record?.Condition === 'string' ? record.Condition : undefined
+  if (conditionName && !resolvingConditions.has(conditionName)) {
+    const conditionExpression = conditions[conditionName]
+    if (conditionExpression !== undefined) {
+      resolvingConditions.add(conditionName)
+      collectRuleConditionRefs(conditionExpression, conditions, refs, resolvingConditions)
+      resolvingConditions.delete(conditionName)
+    }
+  }
+  if (!record) return
+  for (const item of Object.values(record)) collectRuleConditionRefs(item, conditions, refs, resolvingConditions)
+}
+
 function expressionName(value: unknown): string | undefined {
   const record = asRecord(value)
   if (!record) return undefined
 
   if (record.Ref !== undefined) return 'Ref'
+  if (record.Condition !== undefined) return 'Condition'
   return Object.keys(record).find((key) => key.startsWith('Fn::'))
+}
+
+function unsupportedConditionExpression(value: unknown): string | undefined {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const unsupported = unsupportedConditionExpression(item)
+      if (unsupported) return unsupported
+    }
+    return undefined
+  }
+
+  if (!value || typeof value !== 'object') return undefined
+  const record = value as Record<string, unknown>
+  if (typeof record.Ref === 'string' || typeof record.Condition === 'string') return undefined
+
+  const keys = Object.keys(record)
+  if (keys.length !== 1) return 'an unsupported expression'
+  const key = keys[0]
+  if (!supportedConditionFunctions.has(key)) return key
+
+  const args = record[key]
+  if (!Array.isArray(args)) return key
+  if (key === 'Fn::Equals' && args.length !== 2) return key
+  if (key === 'Fn::Not' && args.length !== 1) return key
+  if ((key === 'Fn::And' || key === 'Fn::Or') && (args.length < 2 || args.length > 10)) return key
+
+  for (const item of args) {
+    const unsupported = unsupportedConditionExpression(item)
+    if (unsupported) return unsupported
+  }
+
+  return undefined
 }
 
 function constraintsFor(raw: Record<string, unknown>): ParameterConstraints {
@@ -166,6 +225,7 @@ function constraintsFor(raw: Record<string, unknown>): ParameterConstraints {
 export function normalizeParameters(document: CloudFormationDocument): NormalizationResult {
   const definitions: ParameterDefinition[] = []
   const rules: RuleDefinition[] = []
+  const conditions: Record<string, unknown> = {}
   const outputs: OutputDefinition[] = []
   const warnings: string[] = []
   const parameters = document.Parameters
@@ -268,13 +328,24 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
     }
   }
 
+  const rawConditions = document.Conditions
+  if (rawConditions && typeof rawConditions === 'object' && !Array.isArray(rawConditions)) {
+    for (const [name, value] of Object.entries(rawConditions)) {
+      conditions[name] = value
+      const unsupportedExpression = unsupportedConditionExpression(value)
+      if (unsupportedExpression) {
+        warnings.push(`Condition ${name} uses unsupported expression ${unsupportedExpression} and cannot be evaluated in local preview.`)
+      }
+    }
+  }
+
   const rawRules = document.Rules
   if (rawRules && typeof rawRules === 'object' && !Array.isArray(rawRules)) {
     for (const [name, value] of Object.entries(rawRules)) {
       const ruleRecord = asRecord(value)
       if (!ruleRecord || !Array.isArray(ruleRecord.Assertions)) continue
       const conditionRefs = new Set<string>()
-      collectRefs(ruleRecord.RuleCondition, conditionRefs)
+      collectRuleConditionRefs(ruleRecord.RuleCondition, conditions, conditionRefs)
 
       const assertions = ruleRecord.Assertions
         .map((assertion) => asRecord(assertion))
@@ -352,6 +423,7 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
   return {
     definitions,
     rules,
+    conditions,
     outputs,
     warnings,
     productName: typeof copy?.ProductName === 'string' ? copy.ProductName : 'CloudFormation product',
