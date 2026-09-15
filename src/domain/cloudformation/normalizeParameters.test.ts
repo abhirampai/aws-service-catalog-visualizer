@@ -195,6 +195,36 @@ describe('normalizeParameters', () => {
     expect(result.warnings).toEqual([])
   })
 
+  it('resolves Fn::FindInMap defaults when referenced parameters are declared later', () => {
+    const result = normalizeParameters({
+      Mappings: {
+        EnvConfig: {
+          dev: { InstanceClass: 't3.small' },
+          prod: { InstanceClass: 'm6i.large' },
+        },
+      },
+      Parameters: {
+        InstanceType: {
+          Type: 'String',
+          Default: {
+            'Fn::FindInMap': [
+              'EnvConfig',
+              { Ref: 'Environment' },
+              'InstanceClass',
+            ],
+          },
+        },
+        Environment: { Type: 'String', Default: 'prod' },
+      },
+    })
+
+    expect(result.definitions.map(({ name, defaultValue, required }) => ({ name, defaultValue, required }))).toEqual([
+      { name: 'InstanceType', defaultValue: 'm6i.large', required: false },
+      { name: 'Environment', defaultValue: 'prod', required: false },
+    ])
+    expect(result.warnings).toEqual([])
+  })
+
   it('warns and ignores unresolved Fn::FindInMap defaults', () => {
     const result = normalizeParameters({
       Mappings: {
