@@ -55,9 +55,9 @@ Define CSS custom properties, base typography, the split workspace grid, and the
 Add `jsdom` setup with Testing Library cleanup, then run:
 
 ```bash
-npm install
-npm test -- --run
-npm run build
+yarn install
+yarn test --run
+yarn build
 ```
 
 Expected: the test command exits successfully and the production build completes.
@@ -85,7 +85,7 @@ Cover a YAML template, a JSON template, malformed YAML with a line number, malfo
 
 - [ ] **Step 2: Run parser tests and verify they fail**
 
-Run `npm test -- --run src/domain/cloudformation/parseTemplate.test.ts`. Expected: failures because the parser module does not exist.
+Run `yarn test --run src/domain/cloudformation/parseTemplate.test.ts`. Expected: failures because the parser module does not exist.
 
 - [ ] **Step 3: Implement `parseTemplate`**
 
@@ -97,7 +97,7 @@ Cover string, number, availability-zone list, defaults, required state, descript
 
 - [ ] **Step 5: Run normalization tests and verify they fail**
 
-Run `npm test -- --run src/domain/cloudformation/normalizeParameters.test.ts`. Expected: failures because normalization is not implemented.
+Run `yarn test --run src/domain/cloudformation/normalizeParameters.test.ts`. Expected: failures because normalization is not implemented.
 
 - [ ] **Step 6: Implement `normalizeParameters`**
 
@@ -105,7 +105,7 @@ Read `document.Parameters`, map each definition into `ParameterDefinition`, deri
 
 - [ ] **Step 7: Run domain tests**
 
-Run `npm test -- --run src/domain/cloudformation`. Expected: all parser and normalization tests pass.
+Run `yarn test --run src/domain/cloudformation`. Expected: all parser and normalization tests pass.
 
 ### Task 3: Implement Local Value Validation And Review Payloads
 
@@ -126,7 +126,7 @@ Test missing required strings, min/max length, allowed patterns, invalid numbers
 
 - [ ] **Step 2: Run the validation tests and verify failure**
 
-Run `npm test -- --run src/domain/provisioning/validateValues.test.ts`. Expected: failures because the validator is absent.
+Run `yarn test --run src/domain/provisioning/validateValues.test.ts`. Expected: failures because the validator is absent.
 
 - [ ] **Step 3: Implement `validateValues`**
 
@@ -138,7 +138,7 @@ Assert that string and number values become strings in the payload and availabil
 
 - [ ] **Step 5: Implement `createPayload` and run tests**
 
-Convert scalar values to strings, preserve availability-zone selections as string arrays, omit absent optional values, then run `npm test -- --run src/domain/provisioning`. Expected: all tests pass.
+Convert scalar values to strings, preserve availability-zone selections as string arrays, omit absent optional values, then run `yarn test --run src/domain/provisioning`. Expected: all tests pass.
 
 ### Task 4: Build The Editor And Generated Provisioning Form
 
@@ -188,7 +188,7 @@ Style headings, sections, helper text, required markers, validation states, revi
 
 - [ ] **Step 8: Run component tests**
 
-Run `npm test -- --run src/components/ProvisioningForm.test.tsx`. Expected: all component tests pass.
+Run `yarn test --run src/components/ProvisioningForm.test.tsx`. Expected: all component tests pass.
 
 ### Task 5: Add End-To-End Verification And Documentation
 
@@ -207,7 +207,7 @@ Test loading the sample, editing a parameter, seeing the generated field, submit
 
 - [ ] **Step 2: Configure Playwright and run the test**
 
-Start the Vite preview server through Playwright webServer configuration, then run `npm run test:e2e`. Expected: the workflow passes in the configured browser.
+Start the Vite preview server through Playwright webServer configuration, then run `yarn test:e2e`. Expected: the workflow passes in the configured browser.
 
 - [ ] **Step 3: Document usage and supported features**
 
@@ -222,9 +222,9 @@ Add dependencies, build output, Playwright artifacts, and `.superpowers/` to `.g
 Run:
 
 ```bash
-npm test -- --run
-npm run build
-npm run test:e2e
+yarn test --run
+yarn build
+yarn test:e2e
 ```
 
 Expected: unit tests, production build, and browser tests all pass.

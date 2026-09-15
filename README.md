@@ -1,19 +1,28 @@
 # AWS Service Catalog Provisioning Playground
 
-This browser-only playground turns the `Parameters` section of a CloudFormation
-template into a local provisioning form and review payload. It is intended for
+Browser-based AWS Service Catalog provisioning playground that turns CloudFormation parameters into an interactive, AWS Console-like form preview.
+
+## What It Does
+
+Paste or edit a CloudFormation YAML or JSON template and see its provisioning
+experience rendered live. The playground supports parameter defaults, required
+fields, allowed values, validation constraints, local review payloads, and
+responsive desktop/mobile layouts.
+
+Everything runs in the browser. It does not require AWS credentials, make AWS
+API calls, provision resources, or persist templates. It is intended for
 exploring the form experience, not for provisioning products in AWS.
 
 ## Install
 
 ```bash
-npm install
+yarn install
 ```
 
 Install the Playwright browser once when running the end-to-end suite locally:
 
 ```bash
-npx playwright install chromium
+yarn playwright install chromium
 ```
 
 ## Development
@@ -21,7 +30,7 @@ npx playwright install chromium
 Start the Vite development server:
 
 ```bash
-npm run dev
+yarn dev
 ```
 
 Open the displayed local URL, edit the YAML or JSON in the template editor, and
@@ -30,9 +39,9 @@ use **Review payload** to inspect the generated request values.
 ## Checks
 
 ```bash
-npm test -- --run
-npm run build
-npm run test:e2e
+yarn test --run
+yarn build
+yarn test:e2e
 ```
 
 The E2E command starts Vite automatically through Playwright's `webServer`
