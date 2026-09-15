@@ -213,6 +213,26 @@ describe('App', () => {
     expect(screen.getByLabelText('Environment')).toHaveValue('prod')
     expect(screen.getByLabelText('Owner Name')).toBeInTheDocument()
   })
+
+  it('derives missing provisioning inputs from resource Ref values', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const editor = screen.getByRole('textbox', { name: 'CloudFormation template' })
+    const resourceTemplate = `Resources:
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+`
+
+    await user.click(editor)
+    await user.keyboard('{Control>}a{/Control}')
+    await user.keyboard('{Backspace}')
+    fireEvent.paste(editor, { clipboardData: { getData: () => resourceTemplate } })
+
+    await waitFor(() => expect(screen.getByLabelText('Bucket Name')).toBeInTheDocument())
+    expect(screen.getByText('Resource reference BucketName is not declared in Parameters and was added as a required text input.')).toBeInTheDocument()
+  })
 })
 
 describe('TemplateEditor', () => {

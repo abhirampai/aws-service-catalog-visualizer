@@ -138,4 +138,30 @@ describe('normalizeParameters', () => {
       'Parameter Subnets has an unsupported structured or list type and was omitted.',
     ])
   })
+
+  it('adds required text inputs for resource references that are missing from Parameters', () => {
+    const result = normalizeParameters({
+      Parameters: {
+        ExistingName: { Type: 'String' },
+      },
+      Resources: {
+        Bucket: {
+          Type: 'AWS::S3::Bucket',
+          Properties: {
+            BucketName: { Ref: 'BucketName' },
+            ExistingTag: { Ref: 'ExistingName' },
+            RegionTag: { Ref: 'AWS::Region' },
+          },
+        },
+      },
+    })
+
+    expect(result.definitions.map(({ name, type, required, description }) => ({ name, type, required, description }))).toEqual([
+      { name: 'ExistingName', type: 'String', required: true, description: undefined },
+      { name: 'BucketName', type: 'String', required: true, description: 'Derived from Resources section (Ref).' },
+    ])
+    expect(result.warnings).toEqual([
+      'Resource reference BucketName is not declared in Parameters and was added as a required text input.',
+    ])
+  })
 })

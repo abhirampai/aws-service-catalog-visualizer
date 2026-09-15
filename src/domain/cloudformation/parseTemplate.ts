@@ -1,4 +1,4 @@
-import { parseDocument } from 'yaml'
+import { isMap, isScalar, isSeq, parseDocument } from 'yaml'
 import type { CloudFormationDocument, ParseDiagnostic, ParseResult } from './types'
 
 function diagnosticFromError(error: unknown, fallbackMessage: string): ParseDiagnostic {
@@ -29,6 +29,49 @@ function jsonLocation(source: string, error: unknown): Pick<ParseDiagnostic, 'li
   return { line, column: offset - lastNewline }
 }
 
+const intrinsicTagMap = {
+  '!And': 'Fn::And',
+  '!Base64': 'Fn::Base64',
+  '!Cidr': 'Fn::Cidr',
+  '!Equals': 'Fn::Equals',
+  '!FindInMap': 'Fn::FindInMap',
+  '!GetAtt': 'Fn::GetAtt',
+  '!GetAZs': 'Fn::GetAZs',
+  '!If': 'Fn::If',
+  '!ImportValue': 'Fn::ImportValue',
+  '!Join': 'Fn::Join',
+  '!Not': 'Fn::Not',
+  '!Or': 'Fn::Or',
+  '!Ref': 'Ref',
+  '!Select': 'Fn::Select',
+  '!Split': 'Fn::Split',
+  '!Sub': 'Fn::Sub',
+} as const
+
+function intrinsicForTag(tag: unknown): string | undefined {
+  return typeof tag === 'string' ? intrinsicTagMap[tag as keyof typeof intrinsicTagMap] : undefined
+}
+
+function valueFromYamlNode(node: unknown): unknown {
+  const intrinsic = intrinsicForTag((node as { tag?: unknown })?.tag)
+  if (isScalar(node)) {
+    const value = node.value
+    return intrinsic ? { [intrinsic]: value } : value
+  }
+  if (isSeq(node)) {
+    const value = node.items.map((item) => valueFromYamlNode(item))
+    return intrinsic ? { [intrinsic]: value } : value
+  }
+  if (isMap(node)) {
+    const value = Object.fromEntries(node.items.flatMap((item) => {
+      if (!isScalar(item.key)) return []
+      return [[String(item.key.value), valueFromYamlNode(item.value)]]
+    }))
+    return intrinsic ? { [intrinsic]: value } : value
+  }
+  return undefined
+}
+
 export function parseTemplate(source: string): ParseResult {
   const trimmed = source.trim()
   if (!trimmed) {
@@ -57,7 +100,7 @@ export function parseTemplate(source: string): ParseResult {
       return { diagnostics: parsed.errors.map((error) => diagnosticFromError(error, 'Invalid YAML template.')) }
     }
 
-    const value: unknown = parsed.toJS()
+    const value: unknown = valueFromYamlNode(parsed.contents)
     if (typeof value !== 'object' || value === null || Array.isArray(value)) {
       return { diagnostics: [{ message: 'Template root must be an object.', severity: 'error' }] }
     }

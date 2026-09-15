@@ -52,15 +52,18 @@ responsive stacked layout.
 
 ## Supported Features
 
-The editor accepts CloudFormation YAML and JSON documents. Only the
-`Parameters` section is used to generate controls. Supported parameter types
-are:
+The editor accepts CloudFormation YAML and JSON documents. The preview uses
+`Parameters` definitions and also interprets `Resources` references where
+supported. Supported parameter behavior is:
 
 - `String`, including `Default`, `Description`, `AllowedValues`, `MinLength`,
   `MaxLength`, and `AllowedPattern`.
 - `Number`, including `Default`, `Description`, `AllowedValues`, `MinValue`,
   and `MaxValue`.
 - `List<AWS::EC2::AvailabilityZone::Name>` with multiple selection.
+- Resource `Ref` values are interpreted locally. If a resource references a
+  non-pseudo parameter name that is missing from `Parameters`, the preview adds
+  a required text field for that name and shows a warning.
 
 Availability zones use the fixed local examples `us-east-1a`, `us-east-1b`,
 and `us-east-1c`. They are not fetched from AWS. Parameters without defaults

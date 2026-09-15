@@ -21,6 +21,22 @@ describe('parseTemplate', () => {
     expect(result.diagnostics).toEqual([])
   })
 
+  it('preserves CloudFormation YAML intrinsic tags in long-form object syntax', () => {
+    const result = parseTemplate('Resources:\n  Bucket:\n    Type: AWS::S3::Bucket\n    Properties:\n      BucketName: !Ref BucketName\n')
+
+    expect(result.document).toEqual({
+      Resources: {
+        Bucket: {
+          Type: 'AWS::S3::Bucket',
+          Properties: {
+            BucketName: { Ref: 'BucketName' },
+          },
+        },
+      },
+    })
+    expect(result.diagnostics).toEqual([])
+  })
+
   it('reports malformed YAML with a one-based line number', () => {
     const result = parseTemplate('Parameters:\n  Name:\n    Type: [String\n')
 

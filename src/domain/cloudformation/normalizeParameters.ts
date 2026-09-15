@@ -26,6 +26,18 @@ function optionalNumber(value: unknown): number | undefined {
   return typeof value === 'number' ? value : undefined
 }
 
+function collectRefs(value: unknown, refs: Set<string>) {
+  if (Array.isArray(value)) {
+    for (const item of value) collectRefs(item, refs)
+    return
+  }
+  if (!value || typeof value !== 'object') return
+
+  const record = value as Record<string, unknown>
+  if (typeof record.Ref === 'string') refs.add(record.Ref)
+  for (const entry of Object.values(record)) collectRefs(entry, refs)
+}
+
 function constraintsFor(raw: Record<string, unknown>): ParameterConstraints {
   return {
     ...(optionalNumber(raw.MinLength) === undefined ? {} : { minLength: raw.MinLength as number }),
@@ -88,6 +100,28 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
       }
 
       definitions.push(definition)
+    }
+  }
+
+  const existingDefinitionNames = new Set(definitions.map((definition) => definition.name))
+  const resources = document.Resources
+  if (resources && typeof resources === 'object' && !Array.isArray(resources)) {
+    const refs = new Set<string>()
+    collectRefs(resources, refs)
+
+    for (const referenceName of refs) {
+      if (referenceName.startsWith('AWS::') || existingDefinitionNames.has(referenceName)) continue
+
+      definitions.push({
+        name: referenceName,
+        label: labelFor(referenceName),
+        type: 'String',
+        description: 'Derived from Resources section (Ref).',
+        required: true,
+        constraints: {},
+      })
+      warnings.push(`Resource reference ${referenceName} is not declared in Parameters and was added as a required text input.`)
+      existingDefinitionNames.add(referenceName)
     }
   }
 
