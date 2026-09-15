@@ -216,7 +216,17 @@ describe('App', () => {
 })
 
 describe('TemplateEditor', () => {
-  it('loads the sample and formats valid YAML or JSON through the controlled callback', async () => {
+  it('shows editor gutters and focus state for the CodeMirror editor', async () => {
+    const user = userEvent.setup()
+    const { container } = render(<TemplateEditor value={SAMPLE_TEMPLATE} onChange={() => undefined} />)
+    const editor = screen.getByRole('textbox', { name: 'CloudFormation template' })
+
+    expect(container.querySelector('.cm-gutters')).toBeInTheDocument()
+    await user.click(editor)
+    expect(container.querySelector('.cm-editor')).toHaveClass('cm-focused')
+  })
+
+  it('loads the sample, imports a valid file, and formats valid YAML or JSON through the controlled callback', async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()
     render(<TemplateEditor value='{"Parameters":{"Count":{"Type":"Number"}}}' onChange={onChange} />)
@@ -224,8 +234,28 @@ describe('TemplateEditor', () => {
     await user.click(screen.getByRole('button', { name: 'Load sample' }))
     expect(onChange).toHaveBeenCalledWith(SAMPLE_TEMPLATE)
 
+    await user.upload(
+      screen.getByLabelText('Load a CloudFormation template file'),
+      new File(['Parameters:\n  Count:\n    Type: Number\n'], 'template.yml', { type: 'application/yaml' }),
+    )
+    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith('Parameters:\n  Count:\n    Type: Number\n'))
+
     await user.click(screen.getByRole('button', { name: 'Format template' }))
     expect(onChange).toHaveBeenLastCalledWith(expect.stringContaining('Parameters:\n'))
+  })
+
+  it('rejects an invalid loaded file and keeps the current source', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<TemplateEditor value={SAMPLE_TEMPLATE} onChange={onChange} />)
+
+    await user.upload(
+      screen.getByLabelText('Load a CloudFormation template file'),
+      new File(['Parameters:\n  Broken: [\n'], 'broken.yml', { type: 'application/yaml' }),
+    )
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Choose a valid YAML or JSON template file.'))
+    expect(onChange).not.toHaveBeenCalled()
   })
 })
 
