@@ -161,7 +161,10 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
     const editor = screen.getByRole('textbox', { name: 'CloudFormation template' })
-    const source = `${SAMPLE_TEMPLATE}\n  UnsupportedList:\n    Type: List<String>\n`
+    const source = SAMPLE_TEMPLATE.replace(
+      '  AvailabilityZones:\n    Type: List<AWS::EC2::AvailabilityZone::Name>\n    Description: Local availability-zone examples.\n',
+      '  AvailabilityZones:\n    Type: List<AWS::EC2::AvailabilityZone::Name>\n    Description: Local availability-zone examples.\n  UnsupportedList:\n    Type: List<String>\n',
+    )
 
     expect(screen.getByRole('heading', { name: 'Web application baseline' })).toBeInTheDocument()
     await user.click(editor)
@@ -194,12 +197,10 @@ describe('App', () => {
     const updatedTemplate = SAMPLE_TEMPLATE
       .replace('ProductName: Web application baseline', 'ProductName: Live sync product')
       .replace('Default: dev', 'Default: prod')
-      .concat(`
-  OwnerName:
-    Type: String
-    Description: Person responsible for the product.
-    MinLength: 3
-`)
+      .replace(
+        '  AvailabilityZones:\n    Type: List<AWS::EC2::AvailabilityZone::Name>\n    Description: Local availability-zone examples.\n',
+        '  AvailabilityZones:\n    Type: List<AWS::EC2::AvailabilityZone::Name>\n    Description: Local availability-zone examples.\n  OwnerName:\n    Type: String\n    Description: Person responsible for the product.\n    MinLength: 3\n',
+      )
 
     await user.clear(screen.getByLabelText('Application Name'))
     await user.type(screen.getByLabelText('Application Name'), 'catalog-demo')
@@ -212,6 +213,26 @@ describe('App', () => {
     expect(screen.getByLabelText('Application Name')).toHaveValue('catalog-demo')
     expect(screen.getByLabelText('Environment')).toHaveValue('prod')
     expect(screen.getByLabelText('Owner Name')).toBeInTheDocument()
+  })
+
+  it('derives missing provisioning inputs from resource Ref values', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const editor = screen.getByRole('textbox', { name: 'CloudFormation template' })
+    const resourceTemplate = `Resources:
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+`
+
+    await user.click(editor)
+    await user.keyboard('{Control>}a{/Control}')
+    await user.keyboard('{Backspace}')
+    fireEvent.paste(editor, { clipboardData: { getData: () => resourceTemplate } })
+
+    await waitFor(() => expect(screen.getByLabelText('Bucket Name')).toBeInTheDocument())
+    expect(screen.getByText('Resource reference BucketName is not declared in Parameters and was added as a required text input.')).toBeInTheDocument()
   })
 })
 

@@ -32,6 +32,11 @@ Parameters:
   AvailabilityZones:
     Type: List<AWS::EC2::AvailabilityZone::Name>
     Description: Local availability-zone examples.
+Resources:
+  ApplicationBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref ApplicationName
 `
 
 interface TemplateEditorProps {
