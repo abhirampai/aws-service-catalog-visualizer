@@ -1,9 +1,10 @@
 import { yaml } from '@codemirror/lang-yaml'
 import { EditorState } from '@codemirror/state'
-import { EditorView, keymap } from '@codemirror/view'
+import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view'
 import { defaultKeymap, indentWithTab } from '@codemirror/commands'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { parse, stringify } from 'yaml'
+import { parseTemplate } from '../domain/cloudformation/parseTemplate'
 
 export const SAMPLE_TEMPLATE = `AWSTemplateFormatVersion: '2010-09-09'
 Description: A local Service Catalog playground product
@@ -41,8 +42,35 @@ interface TemplateEditorProps {
 export function TemplateEditor({ value, onChange }: TemplateEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const onChangeRef = useRef(onChange)
+  const [fileError, setFileError] = useState('')
   onChangeRef.current = onChange
+
+  const readFileText = (file: File) => new Promise<string>((resolve, reject) => {
+    if (typeof file.text === 'function') {
+      file.text().then(resolve, reject)
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
+    reader.onerror = () => reject(reader.error ?? new Error('Unable to read the selected file.'))
+    reader.readAsText(file)
+  })
+
+  const loadSelectedFile = async (file?: File) => {
+    if (!file) return
+    const source = await readFileText(file)
+    const result = parseTemplate(source)
+    if (!result.document) {
+      setFileError('Choose a valid YAML or JSON template file.')
+      return
+    }
+
+    setFileError('')
+    onChangeRef.current(source)
+  }
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -51,6 +79,10 @@ export function TemplateEditor({ value, onChange }: TemplateEditorProps) {
         doc: value,
         extensions: [
           yaml(),
+          lineNumbers(),
+          highlightActiveLineGutter(),
+          highlightActiveLine(),
+          drawSelection(),
           EditorView.contentAttributes.of({ 'aria-label': 'CloudFormation template' }),
           keymap.of([...defaultKeymap, indentWithTab]),
           EditorView.lineWrapping,
@@ -79,6 +111,7 @@ export function TemplateEditor({ value, onChange }: TemplateEditorProps) {
     <div className="editor-shell">
       <div className="editor-actions">
         <button type="button" onClick={() => onChange(SAMPLE_TEMPLATE)}>Load sample</button>
+        <button type="button" onClick={() => fileInputRef.current?.click()}>Load file</button>
         <button
           type="button"
           onClick={() => {
@@ -92,8 +125,20 @@ export function TemplateEditor({ value, onChange }: TemplateEditorProps) {
           Format template
         </button>
       </div>
+      <input
+        ref={fileInputRef}
+        className="sr-only"
+        type="file"
+        accept=".yml,.yaml,.json,application/yaml,application/x-yaml,application/json"
+        aria-label="Load a CloudFormation template file"
+        onChange={async (event) => {
+          await loadSelectedFile(event.target.files?.[0])
+          event.target.value = ''
+        }}
+      />
       <label className="sr-only" htmlFor="template-source">CloudFormation template</label>
       <div id="template-source" ref={containerRef} className="code-editor" />
+      {fileError && <p className="field-error" role="alert">{fileError}</p>}
     </div>
   )
 }

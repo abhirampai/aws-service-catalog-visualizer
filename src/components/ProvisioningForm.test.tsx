@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import type { ParameterDefinition } from '../domain/cloudformation/types'
 import { SAMPLE_TEMPLATE, TemplateEditor } from './TemplateEditor'
-import { ProvisioningForm } from './ProvisioningForm'
+import { ProvisioningForm, reconcileValuesFromDefinitions } from './ProvisioningForm'
 
 const definitions: ParameterDefinition[] = [
   {
@@ -121,6 +121,39 @@ describe('ProvisioningForm', () => {
     expect(screen.getAllByRole('alert')).toHaveLength(2)
     expect(screen.queryByRole('heading', { name: 'Review payload' })).not.toBeInTheDocument()
   })
+
+  it('preserves entered values while adding fields and refreshing untouched defaults', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<ProvisioningForm definitions={definitions.slice(0, 3)} warnings={[]} onReview={() => undefined} />)
+
+    await user.clear(screen.getByLabelText('Project Name'))
+    await user.type(screen.getByLabelText('Project Name'), 'catalog-demo')
+    expect(screen.getByLabelText('Environment')).toHaveValue('dev')
+
+    rerender(
+      <ProvisioningForm
+        definitions={[
+          ...definitions.slice(0, 1),
+          { ...definitions[1], defaultValue: 'prod' },
+          ...definitions.slice(2, 3),
+          {
+            name: 'OwnerName',
+            label: 'Owner Name',
+            type: 'String',
+            description: 'Person responsible for the product.',
+            required: true,
+            constraints: { minLength: 3 },
+          },
+        ]}
+        warnings={[]}
+        onReview={() => undefined}
+      />,
+    )
+
+    expect(screen.getByLabelText('Project Name')).toHaveValue('catalog-demo')
+    expect(screen.getByLabelText('Environment')).toHaveValue('prod')
+    expect(screen.getByLabelText('Owner Name')).toBeInTheDocument()
+  })
 })
 
 describe('App', () => {
@@ -153,10 +186,47 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByText(/parse error|invalid yaml|root must be an object/i)).toBeInTheDocument())
     expect(screen.getByLabelText('Application Name')).toBeInTheDocument()
   })
+
+  it('updates the preview live for valid template edits without wiping preserved field values', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const editor = screen.getByRole('textbox', { name: 'CloudFormation template' })
+    const updatedTemplate = SAMPLE_TEMPLATE
+      .replace('ProductName: Web application baseline', 'ProductName: Live sync product')
+      .replace('Default: dev', 'Default: prod')
+      .concat(`
+  OwnerName:
+    Type: String
+    Description: Person responsible for the product.
+    MinLength: 3
+`)
+
+    await user.clear(screen.getByLabelText('Application Name'))
+    await user.type(screen.getByLabelText('Application Name'), 'catalog-demo')
+    await user.click(editor)
+    await user.keyboard('{Control>}a{/Control}')
+    await user.keyboard('{Backspace}')
+    fireEvent.paste(editor, { clipboardData: { getData: () => updatedTemplate } })
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Live sync product' })).toBeInTheDocument())
+    expect(screen.getByLabelText('Application Name')).toHaveValue('catalog-demo')
+    expect(screen.getByLabelText('Environment')).toHaveValue('prod')
+    expect(screen.getByLabelText('Owner Name')).toBeInTheDocument()
+  })
 })
 
 describe('TemplateEditor', () => {
-  it('loads the sample and formats valid YAML or JSON through the controlled callback', async () => {
+  it('shows editor gutters and focus state for the CodeMirror editor', async () => {
+    const user = userEvent.setup()
+    const { container } = render(<TemplateEditor value={SAMPLE_TEMPLATE} onChange={() => undefined} />)
+    const editor = screen.getByRole('textbox', { name: 'CloudFormation template' })
+
+    expect(container.querySelector('.cm-gutters')).toBeInTheDocument()
+    await user.click(editor)
+    expect(container.querySelector('.cm-editor')).toHaveClass('cm-focused')
+  })
+
+  it('loads the sample, imports a valid file, and formats valid YAML or JSON through the controlled callback', async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()
     render(<TemplateEditor value='{"Parameters":{"Count":{"Type":"Number"}}}' onChange={onChange} />)
@@ -164,7 +234,56 @@ describe('TemplateEditor', () => {
     await user.click(screen.getByRole('button', { name: 'Load sample' }))
     expect(onChange).toHaveBeenCalledWith(SAMPLE_TEMPLATE)
 
+    await user.upload(
+      screen.getByLabelText('Load a CloudFormation template file'),
+      new File(['Parameters:\n  Count:\n    Type: Number\n'], 'template.yml', { type: 'application/yaml' }),
+    )
+    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith('Parameters:\n  Count:\n    Type: Number\n'))
+
     await user.click(screen.getByRole('button', { name: 'Format template' }))
     expect(onChange).toHaveBeenLastCalledWith(expect.stringContaining('Parameters:\n'))
+  })
+
+  it('rejects an invalid loaded file and keeps the current source', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<TemplateEditor value={SAMPLE_TEMPLATE} onChange={onChange} />)
+
+    await user.upload(
+      screen.getByLabelText('Load a CloudFormation template file'),
+      new File(['Parameters:\n  Broken: [\n'], 'broken.yml', { type: 'application/yaml' }),
+    )
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Choose a valid YAML or JSON template file.'))
+    expect(onChange).not.toHaveBeenCalled()
+  })
+})
+
+describe('reconcileValuesFromDefinitions', () => {
+  it('preserves custom values and refreshes untouched defaults for matching parameters', () => {
+    const nextDefinitions = [
+      definitions[0],
+      { ...definitions[1], defaultValue: 'prod' },
+      definitions[2],
+      {
+        name: 'OwnerName',
+        label: 'Owner Name',
+        type: 'String',
+        required: true,
+        constraints: { minLength: 3 },
+      },
+    ] satisfies ParameterDefinition[]
+
+    expect(
+      reconcileValuesFromDefinitions(
+        { ProjectName: 'catalog-demo', Environment: 'dev', InstanceCount: 4 },
+        definitions.slice(0, 3),
+        nextDefinitions,
+      ),
+    ).toEqual({
+      ProjectName: 'catalog-demo',
+      Environment: 'prod',
+      InstanceCount: 4,
+    })
   })
 })

@@ -60,6 +60,41 @@ test('loads, edits, validates, and reviews a local provisioning workflow', async
   await expect(page.getByLabel('Owner name')).toHaveValue('Abhiram')
 })
 
+test('synchronizes valid editor changes into the preview without clearing preserved values', async ({ page }) => {
+  await page.goto('/')
+
+  await expect(page.getByLabel('Application name')).toBeVisible()
+  await page.getByLabel('Application name').fill('catalog-demo')
+  await expect(page.getByLabel('Environment')).toHaveValue('dev')
+
+  await replaceEditorContents(
+    page,
+    editableTemplate.replace('Default: dev', 'Default: prod'),
+  )
+
+  await expect(page.getByRole('heading', { name: 'Browser test product' })).toBeVisible()
+  await expect(page.getByLabel('Application name')).toHaveValue('catalog-demo')
+  await expect(page.getByLabel('Environment')).toHaveValue('prod')
+  await expect(page.getByLabel('Owner name')).toBeVisible()
+})
+
+test('shows editor affordances and loads a valid local template file', async ({ page }) => {
+  await page.goto('/')
+
+  await expect(page.locator('.cm-gutters')).toBeVisible()
+  await page.locator('.cm-content').click()
+  await expect(page.locator('.cm-editor')).toHaveClass(/cm-focused/)
+
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'uploaded-template.yml',
+    mimeType: 'application/yaml',
+    buffer: Buffer.from(editableTemplate),
+  })
+
+  await expect(page.getByRole('heading', { name: 'Browser test product' })).toBeVisible()
+  await expect(page.getByLabel('Owner name')).toBeVisible()
+})
+
 test('stacks the editor and preview panes on a narrow viewport', async ({ page }) => {
   await page.setViewportSize({ width: 600, height: 900 })
   await page.goto('/')

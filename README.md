@@ -4,10 +4,10 @@ Browser-based AWS Service Catalog provisioning playground that turns CloudFormat
 
 ## What It Does
 
-Paste or edit a CloudFormation YAML or JSON template and see its provisioning
-experience rendered live. The playground supports parameter defaults, required
-fields, allowed values, validation constraints, local review payloads, and
-responsive desktop/mobile layouts.
+Paste, load, or edit a CloudFormation YAML or JSON template and see its
+provisioning experience rendered live. The playground supports parameter
+defaults, required fields, allowed values, validation constraints, local review
+payloads, and responsive desktop/mobile layouts.
 
 Everything runs in the browser. It does not require AWS credentials, make AWS
 API calls, provision resources, or persist templates. It is intended for
@@ -33,8 +33,9 @@ Start the Vite development server:
 yarn dev
 ```
 
-Open the displayed local URL, edit the YAML or JSON in the template editor, and
-use **Review payload** to inspect the generated request values.
+Open the displayed local URL, edit the YAML or JSON in the template editor or
+load a local `.yml`, `.yaml`, or `.json` template file, and use **Review
+payload** to inspect the generated request values.
 
 ## Checks
 
@@ -95,7 +96,6 @@ are not persisted.
 - [Support CloudFormation Dynamic References](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/7)
 - [Support CloudFormation Intrinsic Functions](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/8)
 - [Support CloudFormation Transforms and Macros](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/9)
-- [Add Realtime Code Editor to Preview Synchronization](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/10)
 - [Support AWS Account and Region Metadata](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/11)
 - [Support CloudFormation Pseudo Parameters](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/12)
 - [Support CloudFormation Parameter Groups](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/13)

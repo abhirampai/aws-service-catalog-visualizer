@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ParameterDefinition } from '../domain/cloudformation/types'
 import { createPayload } from '../domain/provisioning/createPayload'
 import { validateValues, type FieldErrors } from '../domain/provisioning/validateValues'
@@ -13,28 +13,94 @@ interface ProvisioningFormProps {
   productDescription?: string
 }
 
+const availabilityZoneType = 'List<AWS::EC2::AvailabilityZone::Name>'
+
+function defaultValueForDefinition(definition: ParameterDefinition): string | number | string[] | undefined {
+  const value = definition.defaultValue
+  return definition.type === availabilityZoneType && typeof value === 'string'
+    ? value.split(',').map((item) => item.trim()).filter(Boolean)
+    : value
+}
+
+function normalizeValue(definition: ParameterDefinition, value: unknown): string | number | string[] | undefined {
+  if (value === undefined) return undefined
+  if (definition.type === availabilityZoneType) {
+    const selectedValues = Array.isArray(value)
+      ? value.map(String)
+      : typeof value === 'string'
+        ? value.split(',').map((item) => item.trim()).filter(Boolean)
+        : []
+    const options = definition.options ?? definition.allowedValues?.map(String)
+    return options ? selectedValues.filter((item) => options.includes(item)) : selectedValues
+  }
+  if (value === '') return ''
+  if (Array.isArray(value)) return undefined
+  if (definition.allowedValues) {
+    const stringValue = String(value)
+    return definition.allowedValues.some((option) => String(option) === stringValue) ? stringValue : undefined
+  }
+  return typeof value === 'string' || typeof value === 'number' ? value : undefined
+}
+
+function valuesEqual(left: string | number | string[] | undefined, right: string | number | string[] | undefined): boolean {
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left)
+      && Array.isArray(right)
+      && left.length === right.length
+      && left.every((value, index) => value === right[index])
+  }
+  return left === right
+}
+
 function valuesFromDefinitions(definitions: ParameterDefinition[]): Record<string, unknown> {
   return Object.fromEntries(definitions
-    .filter((definition) => definition.defaultValue !== undefined)
-    .map((definition) => {
-      const value = definition.defaultValue
-      const normalizedValue = definition.type === 'List<AWS::EC2::AvailabilityZone::Name>' && typeof value === 'string'
-        ? value.split(',').map((item) => item.trim()).filter(Boolean)
-        : value
-      return [definition.name, normalizedValue]
+    .flatMap((definition) => {
+      const value = defaultValueForDefinition(definition)
+      return value === undefined ? [] : [[definition.name, value]]
     }))
+}
+
+export function reconcileValuesFromDefinitions(
+  currentValues: Record<string, unknown>,
+  previousDefinitions: ParameterDefinition[],
+  nextDefinitions: ParameterDefinition[],
+): Record<string, unknown> {
+  const previousDefinitionsByName = new Map(previousDefinitions.map((definition) => [definition.name, definition]))
+
+  return Object.fromEntries(nextDefinitions.flatMap((definition) => {
+    const previousDefinition = previousDefinitionsByName.get(definition.name)
+    const nextDefaultValue = defaultValueForDefinition(definition)
+    if (!previousDefinition) {
+      return nextDefaultValue === undefined ? [] : [[definition.name, nextDefaultValue]]
+    }
+
+    const currentValue = currentValues[definition.name]
+    const previousDefaultValue = defaultValueForDefinition(previousDefinition)
+    const normalizedCurrentValue = normalizeValue(definition, currentValue)
+    const normalizedPreviousValue = normalizeValue(previousDefinition, currentValue)
+    const matchesPreviousDefault = valuesEqual(normalizedPreviousValue, previousDefaultValue)
+    const shouldApplyUpdatedDefault = matchesPreviousDefault && !valuesEqual(previousDefaultValue, nextDefaultValue)
+    const resolvedValue = normalizedCurrentValue === undefined || shouldApplyUpdatedDefault
+      ? nextDefaultValue
+      : normalizedCurrentValue
+
+    return resolvedValue === undefined ? [] : [[definition.name, resolvedValue]]
+  }))
 }
 
 export function ProvisioningForm({ definitions, warnings, onReview, productName = 'CloudFormation product', productDescription = 'Configure this product' }: ProvisioningFormProps) {
   const [values, setValues] = useState<Record<string, unknown>>(() => valuesFromDefinitions(definitions))
   const [errors, setErrors] = useState<FieldErrors>({})
   const [payload, setPayload] = useState<Record<string, string | string[]> | null>(null)
+  const previousDefinitionsRef = useRef(definitions)
+  const definitionsSignature = JSON.stringify(definitions)
 
   useEffect(() => {
-    setValues(valuesFromDefinitions(definitions))
+    setValues((current) => reconcileValuesFromDefinitions(current, previousDefinitionsRef.current, definitions))
     setErrors({})
     setPayload(null)
-  }, [definitions])
+    previousDefinitionsRef.current = definitions
+  }, [definitionsSignature])
 
   const updateValue = (name: string, value: string | string[]) => {
     setValues((current) => ({ ...current, [name]: value }))

@@ -113,8 +113,13 @@ button { border: 1px solid var(--color-border); border-radius: 0.35rem; backgrou
 button:hover { border-color: var(--color-accent); color: var(--color-accent-dark); }
 .code-editor { min-height: 27rem; overflow: auto; border: 1px solid #8b99aa; border-radius: 0.35rem; background: var(--color-code); color: #e8eef7; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }
 .cm-editor { min-height: 27rem; }
+.cm-editor.cm-focused { outline: 3px solid rgb(22 119 168 / 30%); outline-offset: -1px; }
 .cm-scroller { min-height: 27rem; }
-.cm-content { padding: 1rem 0; }
+.cm-gutters { background: #0d1728; color: #8ea0b8; border-right: 1px solid #314156; }
+.cm-activeLineGutter { background: #132037; color: #dbe7f5; }
+.cm-content { padding: 1rem 0; cursor: text; caret-color: #7dd3fc; }
+.cm-activeLine { background: rgb(255 255 255 / 4%); }
+.cm-cursor, .cm-dropCursor { border-left-color: #7dd3fc; }
 .provisioning-content { display: grid; gap: var(--space-3); }
 .product-summary { border-bottom: 1px solid var(--color-border); padding-bottom: var(--space-3); }
 .product-summary h3 { margin: 0 0 var(--space-1); font-size: 1.25rem; }
