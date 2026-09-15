@@ -61,6 +61,8 @@ supported. Supported parameter behavior is:
 - `Number`, including `Default`, `Description`, `AllowedValues`, `MinValue`,
   and `MaxValue`.
 - `List<AWS::EC2::AvailabilityZone::Name>` with multiple selection.
+- `Mappings` lookups used by parameter defaults through `Fn::FindInMap` and
+  `Ref`, when they resolve to scalar values.
 - Resource `Ref` values are interpreted locally. If a resource references a
   non-pseudo parameter name that is missing from `Parameters`, the preview adds
   a required text field for that name and shows a warning.
@@ -90,7 +92,6 @@ are not persisted.
 
 ## Roadmap
 
-- [Support CloudFormation Mappings](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/2)
 - [Support CloudFormation Rules](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/3)
 - [Support CloudFormation Outputs](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/4)
 - [Support CloudFormation Conditions](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/5)

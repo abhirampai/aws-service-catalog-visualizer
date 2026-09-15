@@ -37,6 +37,30 @@ describe('parseTemplate', () => {
     expect(result.diagnostics).toEqual([])
   })
 
+  it('parses !FindInMap with nested intrinsic values into long-form syntax', () => {
+    const result = parseTemplate('Parameters:\n  Environment:\n    Type: String\n    Default: dev\n  AmiId:\n    Type: String\n    Default: !FindInMap [RegionMap, !Ref Environment, Ami]\n')
+
+    expect(result.document).toEqual({
+      Parameters: {
+        Environment: {
+          Type: 'String',
+          Default: 'dev',
+        },
+        AmiId: {
+          Type: 'String',
+          Default: {
+            'Fn::FindInMap': [
+              'RegionMap',
+              { Ref: 'Environment' },
+              'Ami',
+            ],
+          },
+        },
+      },
+    })
+    expect(result.diagnostics).toEqual([])
+  })
+
   it('reports malformed YAML with a one-based line number', () => {
     const result = parseTemplate('Parameters:\n  Name:\n    Type: [String\n')
 

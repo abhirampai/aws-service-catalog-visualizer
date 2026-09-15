@@ -26,6 +26,111 @@ function optionalNumber(value: unknown): number | undefined {
   return typeof value === 'number' ? value : undefined
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+}
+
+function isFindInMap(value: unknown): value is { 'Fn::FindInMap': unknown } {
+  const record = asRecord(value)
+  return !!record && Object.prototype.hasOwnProperty.call(record, 'Fn::FindInMap')
+}
+
+function resolveScalar(
+  value: unknown,
+  mappings: Record<string, unknown>,
+  resolveRef: (name: string) => string | number | undefined,
+): string | number | undefined {
+  if (isScalar(value)) return value
+
+  const record = asRecord(value)
+  if (!record) return undefined
+
+  if (typeof record.Ref === 'string') {
+    return resolveRef(record.Ref)
+  }
+
+  const lookup = record['Fn::FindInMap']
+  if (!Array.isArray(lookup) || lookup.length !== 3) return undefined
+
+  const mapName = resolveScalar(lookup[0], mappings, resolveRef)
+  const topLevelKey = resolveScalar(lookup[1], mappings, resolveRef)
+  const secondLevelKey = resolveScalar(lookup[2], mappings, resolveRef)
+  if (mapName === undefined || topLevelKey === undefined || secondLevelKey === undefined) return undefined
+
+  const mapRecord = asRecord(mappings[String(mapName)])
+  const topLevelRecord = asRecord(mapRecord?.[String(topLevelKey)])
+  const mappedValue = topLevelRecord?.[String(secondLevelKey)]
+  return isScalar(mappedValue) ? mappedValue : undefined
+}
+
+function warningForUnresolvedFindInMap(
+  name: string,
+  value: unknown,
+  mappings: Record<string, unknown>,
+  resolveRef: (name: string) => string | number | undefined,
+): string | undefined {
+  const record = asRecord(value)
+  const lookup = record?.['Fn::FindInMap']
+  if (!Array.isArray(lookup) || lookup.length !== 3) {
+    return `Parameter ${name} has an invalid Fn::FindInMap default and it was ignored.`
+  }
+
+  const mapName = resolveScalar(lookup[0], mappings, resolveRef)
+  const topLevelKey = resolveScalar(lookup[1], mappings, resolveRef)
+  const secondLevelKey = resolveScalar(lookup[2], mappings, resolveRef)
+  if (mapName === undefined || topLevelKey === undefined || secondLevelKey === undefined) {
+    return `Parameter ${name} has an unresolved Fn::FindInMap default and it was ignored.`
+  }
+
+  const mapRecord = asRecord(mappings[String(mapName)])
+  if (!mapRecord) {
+    return `Parameter ${name} references missing mapping ${String(mapName)} in Fn::FindInMap default.`
+  }
+
+  const topLevelRecord = asRecord(mapRecord[String(topLevelKey)])
+  if (!topLevelRecord) {
+    return `Parameter ${name} references missing mapping key ${String(topLevelKey)} in ${String(mapName)}.`
+  }
+
+  if (!isScalar(topLevelRecord[String(secondLevelKey)])) {
+    return `Parameter ${name} references missing mapping value ${String(secondLevelKey)} in ${String(mapName)}.${String(topLevelKey)}.`
+  }
+
+  return undefined
+}
+
+function resolveParameterDefault(
+  name: string,
+  parameterRecords: Map<string, Record<string, unknown>>,
+  mappings: Record<string, unknown>,
+  defaultsByName: Map<string, string | number>,
+  resolving: Set<string>,
+): string | number | undefined {
+  const cachedDefault = defaultsByName.get(name)
+  if (cachedDefault !== undefined) return cachedDefault
+  if (resolving.has(name)) return undefined
+
+  const parameter = parameterRecords.get(name)
+  if (!parameter) return undefined
+
+  const defaultValue = parameter.Default
+  if (isScalar(defaultValue)) return defaultValue
+
+  const defaultRecord = asRecord(defaultValue)
+  if (!isFindInMap(defaultValue) && typeof defaultRecord?.Ref !== 'string') return undefined
+
+  resolving.add(name)
+  const resolvedDefault = resolveScalar(defaultValue, mappings, (refName) =>
+    resolveParameterDefault(refName, parameterRecords, mappings, defaultsByName, resolving),
+  )
+  resolving.delete(name)
+
+  if (resolvedDefault !== undefined) defaultsByName.set(name, resolvedDefault)
+  return resolvedDefault
+}
+
 function collectRefs(value: unknown, refs: Set<string>) {
   if (Array.isArray(value)) {
     for (const item of value) collectRefs(item, refs)
@@ -52,6 +157,17 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
   const definitions: ParameterDefinition[] = []
   const warnings: string[] = []
   const parameters = document.Parameters
+  const mappings = asRecord(document.Mappings) ?? {}
+  const defaultsByName = new Map<string, string | number>()
+  const parameterRecords = new Map<string, Record<string, unknown>>()
+
+  if (parameters && typeof parameters === 'object' && !Array.isArray(parameters)) {
+    for (const [name, value] of Object.entries(parameters)) {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        parameterRecords.set(name, value as Record<string, unknown>)
+      }
+    }
+  }
 
   if (parameters && typeof parameters === 'object' && !Array.isArray(parameters)) {
     for (const [name, value] of Object.entries(parameters)) {
@@ -75,13 +191,27 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
         warnings.push(`Parameter ${name} uses unsupported type ${type}; it is treated as text.`)
       }
 
+      const resolvesFromReference = isFindInMap(defaultValue) || typeof asRecord(defaultValue)?.Ref === 'string'
+      const resolveDefaultByName = (parameterName: string) =>
+        resolveParameterDefault(parameterName, parameterRecords, mappings, defaultsByName, new Set<string>())
+      const resolvedDefault = resolvesFromReference
+        ? resolveDefaultByName(name)
+        : defaultValue
+
+      if (resolvesFromReference && resolvedDefault === undefined) {
+        const warning = isFindInMap(defaultValue)
+          ? warningForUnresolvedFindInMap(name, defaultValue, mappings, resolveDefaultByName)
+          : `Parameter ${name} has an unresolved Ref default and it was ignored.`
+        if (warning) warnings.push(warning)
+      }
+
       const normalizedDefault = listType
-        ? (typeof defaultValue === 'string'
-            ? defaultValue.split(',').map((item) => item.trim()).filter(Boolean)
-            : Array.isArray(defaultValue) && defaultValue.every((item) => typeof item === 'string')
-              ? defaultValue
+        ? (typeof resolvedDefault === 'string'
+            ? resolvedDefault.split(',').map((item) => item.trim()).filter(Boolean)
+            : Array.isArray(resolvedDefault) && resolvedDefault.every((item) => typeof item === 'string')
+              ? resolvedDefault
               : undefined)
-        : isScalar(defaultValue) ? defaultValue : undefined
+        : isScalar(resolvedDefault) ? resolvedDefault : undefined
 
       const definition: ParameterDefinition = {
         name,
@@ -89,7 +219,7 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
         type,
         description: typeof raw.Description === 'string' ? raw.Description : undefined,
         defaultValue: normalizedDefault,
-        required: !Object.prototype.hasOwnProperty.call(raw, 'Default'),
+        required: normalizedDefault === undefined,
         allowedValues: Array.isArray(raw.AllowedValues) && raw.AllowedValues.every((item) => isScalar(item))
           ? raw.AllowedValues as Array<string | number>
           : undefined,
@@ -100,6 +230,7 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
       }
 
       definitions.push(definition)
+      if (isScalar(normalizedDefault)) defaultsByName.set(name, normalizedDefault)
     }
   }
 
