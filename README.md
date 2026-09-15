@@ -84,11 +84,18 @@ browser. The app makes no AWS network calls, does not require credentials, and
 does not provision or submit anything. Templates, accounts, and shareable links
 are not persisted.
 
-## Unsupported CloudFormation Features
+## Roadmap
 
-This is not a general CloudFormation interpreter. It does not evaluate or
-provision `Resources`, `Mappings`, `Conditions`, `Rules`, `Outputs`, `Hooks`,
-`Transform`/macros, intrinsic functions, dynamic references, pseudo
-parameters, parameter groups, or AWS account and region metadata. Unsupported
-parameter types are omitted or reported as local normalization warnings rather
-than sent to AWS.
+- [Support CloudFormation Resources](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/1)
+- [Support CloudFormation Mappings](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/2)
+- [Support CloudFormation Rules](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/3)
+- [Support CloudFormation Outputs](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/4)
+- [Support CloudFormation Conditions](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/5)
+- [Support CloudFormation Hooks](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/6)
+- [Support CloudFormation Dynamic References](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/7)
+- [Support CloudFormation Intrinsic Functions](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/8)
+- [Support CloudFormation Transforms and Macros](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/9)
+- [Add Realtime Code Editor to Preview Synchronization](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/10)
+- [Support AWS Account and Region Metadata](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/11)
+- [Support CloudFormation Pseudo Parameters](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/12)
+- [Support CloudFormation Parameter Groups](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/13)
