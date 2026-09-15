@@ -100,7 +100,6 @@ are not persisted.
 ## Roadmap
 
 - [Support CloudFormation Rules](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/3)
-- [Support CloudFormation Outputs](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/4)
 - [Support CloudFormation Conditions](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/5)
 - [Support CloudFormation Hooks](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/6)
 - [Support CloudFormation Dynamic References](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/7)
