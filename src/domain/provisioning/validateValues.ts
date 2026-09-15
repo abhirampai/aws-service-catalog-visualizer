@@ -137,7 +137,7 @@ function evaluateRules(
   const definitionNames = new Set(definitions.map((definition) => definition.name))
 
   for (const rule of rules) {
-    if (rule.condition !== undefined && evaluateValue(rule.condition, ruleValues) === false) continue
+    if (rule.condition !== undefined && evaluateValue(rule.condition, ruleValues) !== true) continue
 
     for (const assertion of rule.assertions) {
       const matches = evaluateValue(assertion.assert, ruleValues)
