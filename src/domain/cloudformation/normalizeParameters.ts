@@ -166,6 +166,7 @@ function collectRuleConditionRefs(
       collectRuleConditionRefs(conditionExpression, conditions, refs, resolvingConditions)
       resolvingConditions.delete(conditionName)
     }
+    return
   }
   if (!record) return
   for (const item of Object.values(record)) collectRuleConditionRefs(item, conditions, refs, resolvingConditions)
@@ -181,19 +182,11 @@ function expressionName(value: unknown): string | undefined {
 }
 
 function unsupportedConditionExpression(value: unknown): string | undefined {
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const unsupported = unsupportedConditionExpression(item)
-      if (unsupported) return unsupported
-    }
-    return undefined
-  }
-
   if (!value || typeof value !== 'object') return undefined
   const record = value as Record<string, unknown>
-  if (typeof record.Ref === 'string' || typeof record.Condition === 'string') return undefined
-
   const keys = Object.keys(record)
+  if (typeof record.Ref === 'string' && keys.length === 1) return undefined
+  if (typeof record.Condition === 'string' && keys.length === 1) return undefined
   if (keys.length !== 1) return 'an unsupported expression'
   const key = keys[0]
   if (!supportedConditionFunctions.has(key)) return key
@@ -204,12 +197,20 @@ function unsupportedConditionExpression(value: unknown): string | undefined {
   if (key === 'Fn::Not' && args.length !== 1) return key
   if ((key === 'Fn::And' || key === 'Fn::Or') && (args.length < 2 || args.length > 10)) return key
 
+  const validator = key === 'Fn::Equals'
+    ? unsupportedConditionOperand
+    : unsupportedConditionExpression
   for (const item of args) {
-    const unsupported = unsupportedConditionExpression(item)
+    const unsupported = validator(item)
     if (unsupported) return unsupported
   }
 
   return undefined
+}
+
+function unsupportedConditionOperand(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  return unsupportedConditionExpression(value)
 }
 
 function constraintsFor(raw: Record<string, unknown>): ParameterConstraints {
