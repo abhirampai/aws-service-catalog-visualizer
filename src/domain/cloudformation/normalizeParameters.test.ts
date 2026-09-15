@@ -344,7 +344,7 @@ describe('normalizeParameters', () => {
           {
             assert: { 'Fn::Equals': [{ Ref: 'InstanceCount' }, 2] },
             description: 'Production requires two instances.',
-            parameterNames: ['InstanceCount'],
+            parameterNames: ['Environment', 'InstanceCount'],
           },
         ],
       },

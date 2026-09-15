@@ -273,12 +273,14 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
     for (const [name, value] of Object.entries(rawRules)) {
       const ruleRecord = asRecord(value)
       if (!ruleRecord || !Array.isArray(ruleRecord.Assertions)) continue
+      const conditionRefs = new Set<string>()
+      collectRefs(ruleRecord.RuleCondition, conditionRefs)
 
       const assertions = ruleRecord.Assertions
         .map((assertion) => asRecord(assertion))
         .flatMap((assertion) => {
           if (!assertion || assertion.Assert === undefined) return []
-          const refs = new Set<string>()
+          const refs = new Set(conditionRefs)
           collectRefs(assertion.Assert, refs)
           return [{
             assert: assertion.Assert,
