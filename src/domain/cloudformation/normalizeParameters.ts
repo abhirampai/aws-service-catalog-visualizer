@@ -4,6 +4,7 @@ import type {
   OutputDefinition,
   ParameterConstraints,
   ParameterDefinition,
+  RuleDefinition,
 } from './types'
 
 const supportedTypes = new Set(['String', 'Number', 'List<AWS::EC2::AvailabilityZone::Name>'])
@@ -164,6 +165,7 @@ function constraintsFor(raw: Record<string, unknown>): ParameterConstraints {
 
 export function normalizeParameters(document: CloudFormationDocument): NormalizationResult {
   const definitions: ParameterDefinition[] = []
+  const rules: RuleDefinition[] = []
   const outputs: OutputDefinition[] = []
   const warnings: string[] = []
   const parameters = document.Parameters
@@ -266,6 +268,34 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
     }
   }
 
+  const rawRules = document.Rules
+  if (rawRules && typeof rawRules === 'object' && !Array.isArray(rawRules)) {
+    for (const [name, value] of Object.entries(rawRules)) {
+      const ruleRecord = asRecord(value)
+      if (!ruleRecord || !Array.isArray(ruleRecord.Assertions)) continue
+
+      const assertions = ruleRecord.Assertions
+        .map((assertion) => asRecord(assertion))
+        .flatMap((assertion) => {
+          if (!assertion || assertion.Assert === undefined) return []
+          const refs = new Set<string>()
+          collectRefs(assertion.Assert, refs)
+          return [{
+            assert: assertion.Assert,
+            description: typeof assertion.AssertDescription === 'string' ? assertion.AssertDescription : undefined,
+            parameterNames: Array.from(refs),
+          }]
+        })
+
+      if (assertions.length === 0) continue
+      rules.push({
+        name,
+        condition: ruleRecord.RuleCondition,
+        assertions,
+      })
+    }
+  }
+
   const rawOutputs = document.Outputs
   if (rawOutputs && typeof rawOutputs === 'object' && !Array.isArray(rawOutputs)) {
     for (const [name, value] of Object.entries(rawOutputs)) {
@@ -319,6 +349,7 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
 
   return {
     definitions,
+    rules,
     outputs,
     warnings,
     productName: typeof copy?.ProductName === 'string' ? copy.ProductName : 'CloudFormation product',

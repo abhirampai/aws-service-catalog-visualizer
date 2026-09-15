@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ParameterDefinition } from '../cloudformation/types'
+import type { ParameterDefinition, RuleDefinition } from '../cloudformation/types'
 import { validateValues } from './validateValues'
 
 const stringDefinition = (overrides: Partial<ParameterDefinition> = {}): ParameterDefinition => ({
@@ -141,5 +141,67 @@ describe('validateValues', () => {
       InstanceCount: '2',
       AvailabilityZones: ['us-east-1a', 'us-east-1b'],
     })).toEqual({})
+  })
+
+  it('reports failing rule assertions on each referenced field', () => {
+    const definitions: ParameterDefinition[] = [
+      stringDefinition({ name: 'Environment', label: 'Environment', allowedValues: ['dev', 'prod'], required: true }),
+      {
+        name: 'InstanceCount',
+        label: 'Instance Count',
+        type: 'Number',
+        required: true,
+        constraints: {},
+      },
+    ]
+    const rules: RuleDefinition[] = [
+      {
+        name: 'ProdNeedsTwoInstances',
+        assertions: [
+          {
+            assert: {
+              'Fn::Or': [
+                { 'Fn::Not': [{ 'Fn::Equals': [{ Ref: 'Environment' }, 'prod'] }] },
+                { 'Fn::Equals': [{ Ref: 'InstanceCount' }, 2] },
+              ],
+            },
+            description: 'Production requires two instances.',
+            parameterNames: ['Environment', 'InstanceCount'],
+          },
+        ],
+      },
+    ]
+
+    expect(validateValues(definitions, {
+      Environment: 'prod',
+      InstanceCount: '1',
+    }, rules)).toEqual({
+      Environment: 'Production requires two instances.',
+      InstanceCount: 'Production requires two instances.',
+    })
+
+    expect(validateValues(definitions, {
+      Environment: 'prod',
+      InstanceCount: '2',
+    }, rules)).toEqual({})
+  })
+
+  it('skips assertions when a rule condition is false', () => {
+    const definitions = [stringDefinition({ name: 'Environment', label: 'Environment', required: true })]
+    const rules: RuleDefinition[] = [
+      {
+        name: 'ProdOnlyRule',
+        condition: { 'Fn::Equals': [{ Ref: 'Environment' }, 'prod'] },
+        assertions: [
+          {
+            assert: { 'Fn::Equals': [{ Ref: 'Environment' }, 'prod'] },
+            description: 'Environment must be prod.',
+            parameterNames: ['Environment'],
+          },
+        ],
+      },
+    ]
+
+    expect(validateValues(definitions, { Environment: 'dev' }, rules)).toEqual({})
   })
 })

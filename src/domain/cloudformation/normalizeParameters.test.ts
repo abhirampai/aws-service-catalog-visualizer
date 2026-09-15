@@ -83,6 +83,7 @@ describe('normalizeParameters', () => {
     ])
     expect(result.productName).toBe('Demo product')
     expect(result.productDescription).toBe('A demo description')
+    expect(result.rules).toEqual([])
     expect(result.outputs).toEqual([])
     expect(result.warnings).toEqual([])
   })
@@ -100,6 +101,7 @@ describe('normalizeParameters', () => {
 
     expect(result.productName).toBe('ignored without description')
     expect(result.productDescription).toBe('Configure this product')
+    expect(result.rules).toEqual([])
     expect(result.outputs).toEqual([])
     expect(result.definitions.map(({ name, type, defaultValue, required }) => ({ name, type, defaultValue, required }))).toEqual([
       { name: 'Flag', type: 'AWS::EC2::KeyPair::KeyName', defaultValue: 'key', required: false },
@@ -312,6 +314,40 @@ describe('normalizeParameters', () => {
     ])
     expect(result.warnings).toEqual([
       'Output BucketArn uses unsupported expression Fn::GetAtt and will be shown as unsupported in local preview.',
+    ])
+  })
+
+  it('extracts rule assertions, descriptions, and referenced parameters', () => {
+    const result = normalizeParameters({
+      Parameters: {
+        Environment: { Type: 'String', Default: 'dev' },
+        InstanceCount: { Type: 'Number', Default: 1 },
+      },
+      Rules: {
+        ProdNeedsTwoInstances: {
+          RuleCondition: { 'Fn::Equals': [{ Ref: 'Environment' }, 'prod'] },
+          Assertions: [
+            {
+              Assert: { 'Fn::Equals': [{ Ref: 'InstanceCount' }, 2] },
+              AssertDescription: 'Production requires two instances.',
+            },
+          ],
+        },
+      },
+    })
+
+    expect(result.rules).toEqual([
+      {
+        name: 'ProdNeedsTwoInstances',
+        condition: { 'Fn::Equals': [{ Ref: 'Environment' }, 'prod'] },
+        assertions: [
+          {
+            assert: { 'Fn::Equals': [{ Ref: 'InstanceCount' }, 2] },
+            description: 'Production requires two instances.',
+            parameterNames: ['InstanceCount'],
+          },
+        ],
+      },
     ])
   })
 })
