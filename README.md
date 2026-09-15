@@ -96,7 +96,6 @@ are not persisted.
 - [Support CloudFormation Dynamic References](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/7)
 - [Support CloudFormation Intrinsic Functions](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/8)
 - [Support CloudFormation Transforms and Macros](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/9)
-- [Add Realtime Code Editor to Preview Synchronization](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/10)
 - [Support AWS Account and Region Metadata](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/11)
 - [Support CloudFormation Pseudo Parameters](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/12)
 - [Support CloudFormation Parameter Groups](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/13)
