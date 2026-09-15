@@ -90,7 +90,6 @@ are not persisted.
 
 ## Roadmap
 
-- [Support CloudFormation Resources](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/1)
 - [Support CloudFormation Mappings](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/2)
 - [Support CloudFormation Rules](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/3)
 - [Support CloudFormation Outputs](https://github.com/abhirampai/aws-service-catalog-visualizer/issues/4)
