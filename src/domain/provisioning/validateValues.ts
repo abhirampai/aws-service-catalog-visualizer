@@ -33,6 +33,11 @@ function listFrom(value: unknown): unknown[] | undefined {
   return undefined
 }
 
+function evaluateBoolean(expression: unknown, values: Record<string, unknown>): boolean | undefined {
+  const result = evaluateValue(expression, values)
+  return typeof result === 'boolean' ? result : undefined
+}
+
 function evaluateValue(expression: unknown, values: Record<string, unknown>): unknown {
   if (Array.isArray(expression)) return expression.map((item) => evaluateValue(item, values))
   if (!expression || typeof expression !== 'object') return expression
@@ -54,19 +59,32 @@ function evaluateValue(expression: unknown, values: Record<string, unknown>): un
   if (record['Fn::Not'] !== undefined) {
     const args = record['Fn::Not']
     if (!Array.isArray(args) || args.length !== 1) return undefined
-    return !Boolean(evaluateValue(args[0], values))
+    const value = evaluateBoolean(args[0], values)
+    return value === undefined ? undefined : !value
   }
 
   if (record['Fn::And'] !== undefined) {
     const args = record['Fn::And']
     if (!Array.isArray(args) || args.length < 2 || args.length > 10) return undefined
-    return args.every((item) => Boolean(evaluateValue(item, values)))
+    let hasUnknown = false
+    for (const item of args) {
+      const value = evaluateBoolean(item, values)
+      if (value === false) return false
+      if (value === undefined) hasUnknown = true
+    }
+    return hasUnknown ? undefined : true
   }
 
   if (record['Fn::Or'] !== undefined) {
     const args = record['Fn::Or']
     if (!Array.isArray(args) || args.length < 2 || args.length > 10) return undefined
-    return args.some((item) => Boolean(evaluateValue(item, values)))
+    let hasUnknown = false
+    for (const item of args) {
+      const value = evaluateBoolean(item, values)
+      if (value === true) return true
+      if (value === undefined) hasUnknown = true
+    }
+    return hasUnknown ? undefined : false
   }
 
   if (record['Fn::Contains'] !== undefined) {

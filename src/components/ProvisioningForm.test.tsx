@@ -231,6 +231,52 @@ describe('ProvisioningForm', () => {
     expect(screen.getAllByText('Production requires two instances.')).toHaveLength(2)
     expect(screen.queryByRole('heading', { name: 'Review payload' })).not.toBeInTheDocument()
   })
+
+  it('resets validation state when rules change without parameter changes', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<ProvisioningForm definitions={definitions} rules={rules} outputs={[]} warnings={[]} onReview={() => undefined} />)
+
+    await user.selectOptions(screen.getByLabelText('Environment'), 'prod')
+    await user.type(screen.getByLabelText('Project Name'), 'catalog-demo')
+    await user.clear(screen.getByLabelText('Instance Count'))
+    await user.type(screen.getByLabelText('Instance Count'), '1')
+    await user.selectOptions(screen.getByLabelText('Availability Zones'), ['us-east-1a'])
+    await user.click(screen.getByRole('button', { name: 'Review payload' }))
+    expect(screen.getAllByText('Production requires two instances.')).toHaveLength(2)
+
+    await user.clear(screen.getByLabelText('Instance Count'))
+    await user.type(screen.getByLabelText('Instance Count'), '2')
+    await user.click(screen.getByRole('button', { name: 'Review payload' }))
+    expect(screen.getByRole('heading', { name: 'Review payload' })).toBeInTheDocument()
+
+    rerender(
+      <ProvisioningForm
+        definitions={definitions}
+        rules={[{
+          name: 'ProdNeedsThreeInstances',
+          assertions: [
+            {
+              assert: {
+                'Fn::Or': [
+                  { 'Fn::Not': [{ 'Fn::Equals': [{ Ref: 'Environment' }, 'prod'] }] },
+                  { 'Fn::Equals': [{ Ref: 'InstanceCount' }, 3] },
+                ],
+              },
+              description: 'Production requires three instances.',
+              parameterNames: ['Environment', 'InstanceCount'],
+            },
+          ],
+        }]}
+        outputs={[]}
+        warnings={[]}
+        onReview={() => undefined}
+      />,
+    )
+
+    expect(screen.queryByRole('heading', { name: 'Review payload' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Production requires two instances.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Production requires three instances.')).not.toBeInTheDocument()
+  })
 })
 
 describe('App', () => {

@@ -115,7 +115,7 @@ export function ProvisioningForm({ definitions, rules, outputs, warnings, onRevi
   const [errors, setErrors] = useState<FieldErrors>({})
   const [payload, setPayload] = useState<Record<string, string | string[]> | null>(null)
   const previousDefinitionsRef = useRef(definitions)
-  const definitionsSignature = JSON.stringify(definitions)
+  const modelSignature = JSON.stringify({ definitions, rules })
   const definitionNames = new Set(definitions.map((definition) => definition.name))
 
   useEffect(() => {
@@ -123,7 +123,7 @@ export function ProvisioningForm({ definitions, rules, outputs, warnings, onRevi
     setErrors({})
     setPayload(null)
     previousDefinitionsRef.current = definitions
-  }, [definitionsSignature])
+  }, [modelSignature, definitions])
 
   const updateValue = (name: string, value: string | string[]) => {
     setValues((current) => ({ ...current, [name]: value }))
