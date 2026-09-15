@@ -125,7 +125,7 @@ function evaluateRules(
       ruleValues[definition.name] = Number.isFinite(number) ? number : undefined
       continue
     }
-    if (definition.type === availabilityZoneType) {
+    if (definition.type === availabilityZoneType || definition.type === 'CommaDelimitedList' || definition.type.startsWith('List<')) {
       ruleValues[definition.name] = listFrom(value)?.map(String) ?? []
       continue
     }
@@ -137,7 +137,10 @@ function evaluateRules(
   const definitionNames = new Set(definitions.map((definition) => definition.name))
 
   for (const rule of rules) {
-    if (rule.condition !== undefined && !Boolean(evaluateValue(rule.condition, ruleValues))) continue
+    const conditionResult = rule.condition === undefined
+      ? true
+      : evaluateValue(rule.condition, ruleValues)
+    if (conditionResult === false) continue
 
     for (const assertion of rule.assertions) {
       const matches = evaluateValue(assertion.assert, ruleValues)

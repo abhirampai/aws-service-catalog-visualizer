@@ -204,4 +204,25 @@ describe('validateValues', () => {
 
     expect(validateValues(definitions, { Environment: 'dev' }, rules)).toEqual({})
   })
+
+  it('still evaluates assertions when a rule condition is unsupported locally', () => {
+    const definitions = [stringDefinition({ name: 'Environment', label: 'Environment', required: true })]
+    const rules: RuleDefinition[] = [
+      {
+        name: 'UnsupportedCondition',
+        condition: { 'Fn::ValueOfAll': ['AWS::EC2::VPC::Id', 'Tags.Owner'] },
+        assertions: [
+          {
+            assert: { 'Fn::Equals': [{ Ref: 'Environment' }, 'prod'] },
+            description: 'Environment must be prod.',
+            parameterNames: ['Environment'],
+          },
+        ],
+      },
+    ]
+
+    expect(validateValues(definitions, { Environment: 'dev' }, rules)).toEqual({
+      Environment: 'Environment must be prod.',
+    })
+  })
 })
