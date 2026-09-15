@@ -205,7 +205,7 @@ describe('validateValues', () => {
     expect(validateValues(definitions, { Environment: 'dev' }, rules)).toEqual({})
   })
 
-  it('skips assertions when a rule condition is unsupported locally', () => {
+  it('still evaluates assertions when a rule condition is unsupported locally', () => {
     const definitions = [stringDefinition({ name: 'Environment', label: 'Environment', required: true })]
     const rules: RuleDefinition[] = [
       {
@@ -221,6 +221,8 @@ describe('validateValues', () => {
       },
     ]
 
-    expect(validateValues(definitions, { Environment: 'dev' }, rules)).toEqual({})
+    expect(validateValues(definitions, { Environment: 'dev' }, rules)).toEqual({
+      Environment: 'Environment must be prod.',
+    })
   })
 })
