@@ -1,6 +1,7 @@
 import type {
   CloudFormationDocument,
   NormalizationResult,
+  OutputDefinition,
   ParameterConstraints,
   ParameterDefinition,
 } from './types'
@@ -143,6 +144,14 @@ function collectRefs(value: unknown, refs: Set<string>) {
   for (const entry of Object.values(record)) collectRefs(entry, refs)
 }
 
+function expressionName(value: unknown): string | undefined {
+  const record = asRecord(value)
+  if (!record) return undefined
+
+  if (record.Ref !== undefined) return 'Ref'
+  return Object.keys(record).find((key) => key.startsWith('Fn::'))
+}
+
 function constraintsFor(raw: Record<string, unknown>): ParameterConstraints {
   return {
     ...(optionalNumber(raw.MinLength) === undefined ? {} : { minLength: raw.MinLength as number }),
@@ -155,6 +164,7 @@ function constraintsFor(raw: Record<string, unknown>): ParameterConstraints {
 
 export function normalizeParameters(document: CloudFormationDocument): NormalizationResult {
   const definitions: ParameterDefinition[] = []
+  const outputs: OutputDefinition[] = []
   const warnings: string[] = []
   const parameters = document.Parameters
   const mappings = asRecord(document.Mappings) ?? {}
@@ -256,6 +266,49 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
     }
   }
 
+  const rawOutputs = document.Outputs
+  if (rawOutputs && typeof rawOutputs === 'object' && !Array.isArray(rawOutputs)) {
+    for (const [name, value] of Object.entries(rawOutputs)) {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        warnings.push(`Output ${name} has an unsupported definition and was omitted.`)
+        continue
+      }
+
+      const raw = value as Record<string, unknown>
+      const outputValue = raw.Value
+
+      if (isScalar(outputValue)) {
+        outputs.push({
+          name,
+          description: typeof raw.Description === 'string' ? raw.Description : undefined,
+          kind: 'literal',
+          value: outputValue,
+        })
+        continue
+      }
+
+      const outputRecord = asRecord(outputValue)
+      if (typeof outputRecord?.Ref === 'string') {
+        outputs.push({
+          name,
+          description: typeof raw.Description === 'string' ? raw.Description : undefined,
+          kind: 'ref',
+          referenceName: outputRecord.Ref,
+        })
+        continue
+      }
+
+      const expression = expressionName(outputValue) ?? 'an unsupported expression'
+      warnings.push(`Output ${name} uses unsupported expression ${expression} and will be shown as unsupported in local preview.`)
+      outputs.push({
+        name,
+        description: typeof raw.Description === 'string' ? raw.Description : undefined,
+        kind: 'unsupported',
+        expression,
+      })
+    }
+  }
+
   const metadata = document.Metadata
   const playground = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
     ? (metadata as Record<string, unknown>).Playground
@@ -266,6 +319,7 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
 
   return {
     definitions,
+    outputs,
     warnings,
     productName: typeof copy?.ProductName === 'string' ? copy.ProductName : 'CloudFormation product',
     productDescription: typeof copy?.ProductDescription === 'string' ? copy.ProductDescription : 'Configure this product',

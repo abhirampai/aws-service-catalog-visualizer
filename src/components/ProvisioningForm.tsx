@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ParameterDefinition } from '../domain/cloudformation/types'
+import type { OutputDefinition, ParameterDefinition } from '../domain/cloudformation/types'
 import { createPayload } from '../domain/provisioning/createPayload'
 import { validateValues, type FieldErrors } from '../domain/provisioning/validateValues'
 import { ParameterField } from './ParameterField'
@@ -7,6 +7,7 @@ import { ReviewPayload } from './ReviewPayload'
 
 interface ProvisioningFormProps {
   definitions: ParameterDefinition[]
+  outputs: OutputDefinition[]
   warnings: string[]
   onReview: (payload: Record<string, string | string[]>) => void
   productName?: string
@@ -60,6 +61,26 @@ function valuesFromDefinitions(definitions: ParameterDefinition[]): Record<strin
     }))
 }
 
+function renderedOutputValue(
+  output: OutputDefinition,
+  values: Record<string, unknown>,
+  definitionNames: Set<string>,
+): string {
+  if (output.kind === 'literal') return String(output.value)
+  if (output.kind === 'unsupported') {
+    return `Unsupported local output expression: ${output.expression ?? 'unknown'}.`
+  }
+
+  const referenceName = output.referenceName ?? ''
+  if (!definitionNames.has(referenceName)) {
+    return `Local preview does not resolve Ref ${referenceName}.`
+  }
+
+  const value = values[referenceName]
+  if (value === undefined || value === '') return `Awaiting a value for Ref ${referenceName}.`
+  return Array.isArray(value) ? value.join(', ') : String(value)
+}
+
 export function reconcileValuesFromDefinitions(
   currentValues: Record<string, unknown>,
   previousDefinitions: ParameterDefinition[],
@@ -88,12 +109,13 @@ export function reconcileValuesFromDefinitions(
   }))
 }
 
-export function ProvisioningForm({ definitions, warnings, onReview, productName = 'CloudFormation product', productDescription = 'Configure this product' }: ProvisioningFormProps) {
+export function ProvisioningForm({ definitions, outputs, warnings, onReview, productName = 'CloudFormation product', productDescription = 'Configure this product' }: ProvisioningFormProps) {
   const [values, setValues] = useState<Record<string, unknown>>(() => valuesFromDefinitions(definitions))
   const [errors, setErrors] = useState<FieldErrors>({})
   const [payload, setPayload] = useState<Record<string, string | string[]> | null>(null)
   const previousDefinitionsRef = useRef(definitions)
   const definitionsSignature = JSON.stringify(definitions)
+  const definitionNames = new Set(definitions.map((definition) => definition.name))
 
   useEffect(() => {
     setValues((current) => reconcileValuesFromDefinitions(current, previousDefinitionsRef.current, definitions))
@@ -135,6 +157,21 @@ export function ProvisioningForm({ definitions, warnings, onReview, productName 
           </div>
           <button className="review-button" type="submit">Review payload</button>
         </form>
+      )}
+      {outputs.length > 0 && (
+        <section className="review-outputs" aria-labelledby="review-outputs-heading">
+          <h3 id="review-outputs-heading">CloudFormation outputs</h3>
+          <p className="field-helper">Local preview of supported output values and references.</p>
+          <dl className="output-list">
+            {outputs.map((output) => (
+              <div key={output.name} className="output-item">
+                <dt>{output.name}</dt>
+                {output.description && <p className="field-description">{output.description}</p>}
+                <dd>{renderedOutputValue(output, values, definitionNames)}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
       )}
       {payload && <ReviewPayload payload={payload} />}
     </div>

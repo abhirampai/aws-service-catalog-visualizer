@@ -83,6 +83,7 @@ describe('normalizeParameters', () => {
     ])
     expect(result.productName).toBe('Demo product')
     expect(result.productDescription).toBe('A demo description')
+    expect(result.outputs).toEqual([])
     expect(result.warnings).toEqual([])
   })
 
@@ -99,6 +100,7 @@ describe('normalizeParameters', () => {
 
     expect(result.productName).toBe('ignored without description')
     expect(result.productDescription).toBe('Configure this product')
+    expect(result.outputs).toEqual([])
     expect(result.definitions.map(({ name, type, defaultValue, required }) => ({ name, type, defaultValue, required }))).toEqual([
       { name: 'Flag', type: 'AWS::EC2::KeyPair::KeyName', defaultValue: 'key', required: false },
       { name: 'RequiredFlag', type: 'AWS::EC2::KeyPair::KeyName', defaultValue: undefined, required: true },
@@ -265,6 +267,51 @@ describe('normalizeParameters', () => {
       'Parameter MissingTopKey references missing mapping key prod in EnvConfig.',
       'Parameter MissingSecondKey references missing mapping value VolumeType in EnvConfig.dev.',
       'Parameter InvalidLookup has an invalid Fn::FindInMap default and it was ignored.',
+    ])
+  })
+
+  it('normalizes scalar and Ref outputs and preserves unsupported expressions for local preview', () => {
+    const result = normalizeParameters({
+      Parameters: {
+        ApplicationName: { Type: 'String', Default: 'playground-app' },
+      },
+      Outputs: {
+        StaticOutput: {
+          Description: 'A static output value.',
+          Value: 'ready',
+        },
+        ApplicationNameOutput: {
+          Description: 'Echoes the chosen name.',
+          Value: { Ref: 'ApplicationName' },
+        },
+        BucketArn: {
+          Value: { 'Fn::GetAtt': ['Bucket', 'Arn'] },
+        },
+      },
+    })
+
+    expect(result.outputs).toEqual([
+      {
+        name: 'StaticOutput',
+        description: 'A static output value.',
+        kind: 'literal',
+        value: 'ready',
+      },
+      {
+        name: 'ApplicationNameOutput',
+        description: 'Echoes the chosen name.',
+        kind: 'ref',
+        referenceName: 'ApplicationName',
+      },
+      {
+        name: 'BucketArn',
+        description: undefined,
+        kind: 'unsupported',
+        expression: 'Fn::GetAtt',
+      },
+    ])
+    expect(result.warnings).toEqual([
+      'Output BucketArn uses unsupported expression Fn::GetAtt and will be shown as unsupported in local preview.',
     ])
   })
 })
