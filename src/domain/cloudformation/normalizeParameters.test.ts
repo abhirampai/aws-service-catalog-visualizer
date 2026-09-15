@@ -164,4 +164,77 @@ describe('normalizeParameters', () => {
       'Resource reference BucketName is not declared in Parameters and was added as a required text input.',
     ])
   })
+
+  it('resolves Fn::FindInMap defaults used by provisioning preview', () => {
+    const result = normalizeParameters({
+      Mappings: {
+        EnvConfig: {
+          dev: { InstanceClass: 't3.small' },
+          prod: { InstanceClass: 'm6i.large' },
+        },
+      },
+      Parameters: {
+        Environment: { Type: 'String', Default: 'prod' },
+        InstanceType: {
+          Type: 'String',
+          Default: {
+            'Fn::FindInMap': [
+              'EnvConfig',
+              { Ref: 'Environment' },
+              'InstanceClass',
+            ],
+          },
+        },
+      },
+    })
+
+    expect(result.definitions.map(({ name, defaultValue, required }) => ({ name, defaultValue, required }))).toEqual([
+      { name: 'Environment', defaultValue: 'prod', required: false },
+      { name: 'InstanceType', defaultValue: 'm6i.large', required: false },
+    ])
+    expect(result.warnings).toEqual([])
+  })
+
+  it('warns and ignores unresolved Fn::FindInMap defaults', () => {
+    const result = normalizeParameters({
+      Mappings: {
+        EnvConfig: {
+          dev: { InstanceClass: 't3.small' },
+        },
+      },
+      Parameters: {
+        Environment: { Type: 'String', Default: 'prod' },
+        MissingMap: {
+          Type: 'String',
+          Default: { 'Fn::FindInMap': ['UnknownMap', 'prod', 'InstanceClass'] },
+        },
+        MissingTopKey: {
+          Type: 'String',
+          Default: { 'Fn::FindInMap': ['EnvConfig', 'prod', 'InstanceClass'] },
+        },
+        MissingSecondKey: {
+          Type: 'String',
+          Default: { 'Fn::FindInMap': ['EnvConfig', 'dev', 'VolumeType'] },
+        },
+        InvalidLookup: {
+          Type: 'String',
+          Default: { 'Fn::FindInMap': ['EnvConfig', 'dev'] },
+        },
+      },
+    })
+
+    expect(result.definitions.map(({ name, defaultValue, required }) => ({ name, defaultValue, required }))).toEqual([
+      { name: 'Environment', defaultValue: 'prod', required: false },
+      { name: 'MissingMap', defaultValue: undefined, required: true },
+      { name: 'MissingTopKey', defaultValue: undefined, required: true },
+      { name: 'MissingSecondKey', defaultValue: undefined, required: true },
+      { name: 'InvalidLookup', defaultValue: undefined, required: true },
+    ])
+    expect(result.warnings).toEqual([
+      'Parameter MissingMap references missing mapping UnknownMap in Fn::FindInMap default.',
+      'Parameter MissingTopKey references missing mapping key prod in EnvConfig.',
+      'Parameter MissingSecondKey references missing mapping value VolumeType in EnvConfig.dev.',
+      'Parameter InvalidLookup has an invalid Fn::FindInMap default and it was ignored.',
+    ])
+  })
 })
