@@ -253,8 +253,8 @@ export function evaluateLocalExpression(
     const args = record['Fn::Select']
     if (!Array.isArray(args) || args.length !== 2) return undefined
     const index = selectIndexFrom(evaluateLocalExpression(args[0], context, cache, resolving))
-    const items = listFrom(evaluateLocalExpression(args[1], context, cache, resolving))
-    return index === undefined || !items ? undefined : items[index]
+    const items = evaluateLocalExpression(args[1], context, cache, resolving)
+    return index === undefined || !Array.isArray(items) ? undefined : items[index]
   }
 
   if (record['Fn::Sub'] !== undefined) {

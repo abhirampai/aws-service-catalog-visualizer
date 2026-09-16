@@ -35,5 +35,6 @@ describe('evaluateLocalExpression', () => {
     expect(evaluateLocalExpression({ 'Fn::If': ['MissingCondition', 'yes', 'no'] }, { values: {} })).toBeUndefined()
     expect(evaluateLocalExpression({ 'Fn::Sub': 'arn:${Bucket.Arn}' }, { values: {} })).toBeUndefined()
     expect(evaluateLocalExpression({ 'Fn::GetAtt': ['Bucket', 'Arn'] }, { values: {} })).toBeUndefined()
+    expect(evaluateLocalExpression({ 'Fn::Select': [0, 'a,b'] }, { values: {} })).toBeUndefined()
   })
 })
