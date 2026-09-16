@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { evaluateLocalExpression } from './evaluateLocalExpression'
+import { evaluateLocalExpression, unsupportedLocalExpression } from './evaluateLocalExpression'
 
 describe('evaluateLocalExpression', () => {
   it('evaluates the local intrinsic subset against refs, mappings, and conditions', () => {
@@ -33,6 +33,7 @@ describe('evaluateLocalExpression', () => {
       Domain: { 'Fn::FindInMap': ['EnvConfig', { Ref: 'Environment' }, 'Domain'] },
     }] }, { values, mappings, conditions })).toBe('https://catalog-demo.prod.internal')
     expect(evaluateLocalExpression({ 'Fn::Contains': [{ Ref: 'AvailabilityZones' }, 'us-east-1a'] }, { values, mappings, conditions })).toBe(true)
+    expect(unsupportedLocalExpression({ 'Fn::FindInMap': ['EnvConfig', { Ref: 'Environment' }, 'Domain'] })).toBeUndefined()
   })
 
   it('returns undefined for unresolved or unsupported local expressions', () => {

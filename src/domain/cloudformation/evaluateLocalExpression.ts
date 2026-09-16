@@ -143,7 +143,10 @@ export function unsupportedLocalExpression(value: unknown): string | undefined {
   }
 
   if (key === 'Fn::FindInMap') {
-    return Array.isArray(args) && args.length === 3 ? unsupportedFromItems(args) : key
+    if (!Array.isArray(args) || args.length !== 3) return key
+    return unsupportedLocalExpression(args[0])
+      ?? unsupportedLocalExpression(args[1])
+      ?? unsupportedLocalExpression(args[2])
   }
 
   if (key === 'Fn::If') {
