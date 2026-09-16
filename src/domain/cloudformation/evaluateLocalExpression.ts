@@ -102,6 +102,70 @@ export function isSupportedLocalExpression(value: unknown): boolean {
   return name === 'Ref' || name === 'Condition' || (name !== undefined && supportedIntrinsicFunctions.has(name))
 }
 
+export function unsupportedLocalExpression(value: unknown): string | undefined {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const unsupported = unsupportedLocalExpression(item)
+      if (unsupported) return unsupported
+    }
+    return undefined
+  }
+  if (!value || typeof value !== 'object') return undefined
+
+  const record = value as Record<string, unknown>
+  const keys = Object.keys(record)
+  if (typeof record.Ref === 'string' && keys.length === 1) return undefined
+  if (typeof record.Condition === 'string' && keys.length === 1) return undefined
+  if (keys.length !== 1) return 'an unsupported expression'
+
+  const key = keys[0]
+  if (!supportedIntrinsicFunctions.has(key)) return key
+
+  const args = record[key]
+  const unsupportedFromItems = (items: unknown[]) => {
+    for (const item of items) {
+      const unsupported = unsupportedLocalExpression(item)
+      if (unsupported) return unsupported
+    }
+    return undefined
+  }
+
+  if (key === 'Fn::Equals' || key === 'Fn::Contains' || key === 'Fn::EachMemberEquals' || key === 'Fn::EachMemberIn' || key === 'Fn::Split' || key === 'Fn::Select') {
+    return Array.isArray(args) && args.length === 2 ? unsupportedFromItems(args) : key
+  }
+
+  if (key === 'Fn::Not') {
+    return Array.isArray(args) && args.length === 1 ? unsupportedLocalExpression(args[0]) : key
+  }
+
+  if (key === 'Fn::And' || key === 'Fn::Or') {
+    return Array.isArray(args) && args.length >= 2 && args.length <= 10 ? unsupportedFromItems(args) : key
+  }
+
+  if (key === 'Fn::FindInMap') {
+    return Array.isArray(args) && args.length === 3 ? unsupportedFromItems(args) : key
+  }
+
+  if (key === 'Fn::If') {
+    return Array.isArray(args) && args.length === 3 && typeof args[0] === 'string'
+      ? unsupportedFromItems(args.slice(1))
+      : key
+  }
+
+  if (key === 'Fn::Join') {
+    return Array.isArray(args) && args.length === 2 ? unsupportedFromItems(args) : key
+  }
+
+  if (key === 'Fn::Sub') {
+    if (typeof args === 'string') return undefined
+    if (!Array.isArray(args) || args.length !== 2 || typeof args[0] !== 'string') return key
+    const variableRecord = asRecord(args[1])
+    return variableRecord ? unsupportedFromItems(Object.values(variableRecord)) : key
+  }
+
+  return key
+}
+
 export function evaluateLocalExpression(
   expression: unknown,
   context: LocalEvaluationContext,

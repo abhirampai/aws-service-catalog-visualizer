@@ -6,7 +6,7 @@ import type {
   ParameterDefinition,
   RuleDefinition,
 } from './types'
-import { evaluateLocalExpression, expressionName, isSupportedLocalExpression } from './evaluateLocalExpression'
+import { evaluateLocalExpression, expressionName, isSupportedLocalExpression, unsupportedLocalExpression } from './evaluateLocalExpression'
 
 const supportedTypes = new Set(['String', 'Number', 'List<AWS::EC2::AvailabilityZone::Name>'])
 const availabilityZoneType = 'List<AWS::EC2::AvailabilityZone::Name>'
@@ -241,7 +241,8 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
       }
 
       const defaultExpressionName = expressionName(defaultValue)
-      const resolvesLocally = isSupportedLocalExpression(defaultValue)
+      const unsupportedDefaultExpression = unsupportedLocalExpression(defaultValue)
+      const resolvesLocally = unsupportedDefaultExpression === undefined && isSupportedLocalExpression(defaultValue)
       const resolveDefaultByName = (parameterName: string) =>
         resolveParameterDefault(parameterName, parameterRecords, mappings, conditions, defaultsByName, new Set<string>())
       const resolvedDefault = resolvesLocally
@@ -256,7 +257,10 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
             : `Parameter ${name} has an unresolved ${defaultExpressionName ?? 'expression'} default and it was ignored.`
         if (warning) warnings.push(warning)
       } else if (defaultValue !== undefined && !isScalar(defaultValue) && !Array.isArray(defaultValue) && !resolvesLocally) {
-        warnings.push(`Parameter ${name} uses unsupported expression ${defaultExpressionName ?? 'an unsupported expression'} in its default and it was ignored.`)
+        const warning = isFindInMap(defaultValue) && unsupportedDefaultExpression === 'Fn::FindInMap'
+          ? warningForUnresolvedFindInMap(name, defaultValue, mappings, resolveDefaultByName)
+          : `Parameter ${name} uses unsupported expression ${unsupportedDefaultExpression ?? defaultExpressionName ?? 'an unsupported expression'} in its default and it was ignored.`
+        if (warning) warnings.push(warning)
       }
 
       const normalizedDefault = listType
@@ -381,7 +385,8 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
         continue
       }
 
-      if (isSupportedLocalExpression(outputValue)) {
+      const unsupportedOutputExpression = unsupportedLocalExpression(outputValue)
+      if (unsupportedOutputExpression === undefined && isSupportedLocalExpression(outputValue)) {
         outputs.push({
           name,
           description: typeof raw.Description === 'string' ? raw.Description : undefined,
@@ -391,7 +396,7 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
         continue
       }
 
-      const expression = expressionName(outputValue) ?? 'an unsupported expression'
+      const expression = unsupportedOutputExpression ?? expressionName(outputValue) ?? 'an unsupported expression'
       warnings.push(`Output ${name} uses unsupported expression ${expression} and will be shown as unsupported in local preview.`)
       outputs.push({
         name,

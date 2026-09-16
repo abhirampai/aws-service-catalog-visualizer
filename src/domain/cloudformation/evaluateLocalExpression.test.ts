@@ -28,6 +28,10 @@ describe('evaluateLocalExpression', () => {
       mappings,
       conditions,
     })).toBe('https://catalog-demo.example.com')
+    expect(evaluateLocalExpression({ 'Fn::Sub': ['https://${Host}.${Domain}', {
+      Host: { Ref: 'ApplicationName' },
+      Domain: { 'Fn::FindInMap': ['EnvConfig', { Ref: 'Environment' }, 'Domain'] },
+    }] }, { values, mappings, conditions })).toBe('https://catalog-demo.prod.internal')
     expect(evaluateLocalExpression({ 'Fn::Contains': [{ Ref: 'AvailabilityZones' }, 'us-east-1a'] }, { values, mappings, conditions })).toBe(true)
   })
 

@@ -333,6 +333,31 @@ describe('normalizeParameters', () => {
     ])
   })
 
+  it('keeps nested unsupported intrinsic defaults classified as unsupported', () => {
+    const result = normalizeParameters({
+      Conditions: {
+        UseBucketArn: { 'Fn::Equals': ['yes', 'yes'] },
+      },
+      Parameters: {
+        BucketValue: {
+          Type: 'String',
+          Default: { 'Fn::If': ['UseBucketArn', { 'Fn::GetAtt': ['Bucket', 'Arn'] }, 'ready'] },
+        },
+      },
+    })
+
+    expect(result.definitions).toEqual([
+      expect.objectContaining({
+        name: 'BucketValue',
+        defaultValue: undefined,
+        required: true,
+      }),
+    ])
+    expect(result.warnings).toEqual([
+      'Parameter BucketValue uses unsupported expression Fn::GetAtt in its default and it was ignored.',
+    ])
+  })
+
   it('normalizes scalar and Ref outputs and preserves unsupported expressions for local preview', () => {
     const result = normalizeParameters({
       Parameters: {
@@ -412,6 +437,31 @@ describe('normalizeParameters', () => {
       },
     ])
     expect(result.warnings).toEqual([])
+  })
+
+  it('keeps nested unsupported output expressions classified as unsupported', () => {
+    const result = normalizeParameters({
+      Conditions: {
+        IsProd: { 'Fn::Equals': ['prod', 'prod'] },
+      },
+      Outputs: {
+        BucketValue: {
+          Value: { 'Fn::If': ['IsProd', { 'Fn::GetAtt': ['Bucket', 'Arn'] }, 'ready'] },
+        },
+      },
+    })
+
+    expect(result.outputs).toEqual([
+      {
+        name: 'BucketValue',
+        description: undefined,
+        kind: 'unsupported',
+        expression: 'Fn::GetAtt',
+      },
+    ])
+    expect(result.warnings).toEqual([
+      'Output BucketValue uses unsupported expression Fn::GetAtt and will be shown as unsupported in local preview.',
+    ])
   })
 
   it('extracts rule assertions, descriptions, and referenced parameters', () => {
