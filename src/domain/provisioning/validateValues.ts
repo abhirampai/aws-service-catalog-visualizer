@@ -35,6 +35,30 @@ function addError(errors: FieldErrors, name: string, message: string) {
   }
 }
 
+export function normalizeValuesForLocalEvaluation(
+  definitions: ParameterDefinition[],
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  const normalizedValues: Record<string, unknown> = { ...values }
+  for (const definition of definitions) {
+    const value = values[definition.name]
+    if (value === undefined || value === null) continue
+    if (definition.type === 'Number') {
+      const number = typeof value === 'number' ? value : Number(value)
+      normalizedValues[definition.name] = Number.isFinite(number) ? number : undefined
+      continue
+    }
+    if (definition.type === availabilityZoneType || definition.type === 'CommaDelimitedList' || definition.type.startsWith('List<')) {
+      normalizedValues[definition.name] = listFrom(value)?.map(String) ?? []
+      continue
+    }
+    if (!Array.isArray(value)) {
+      normalizedValues[definition.name] = String(value)
+    }
+  }
+  return normalizedValues
+}
+
 function evaluateRules(
   definitions: ParameterDefinition[],
   rules: RuleDefinition[],
@@ -42,23 +66,7 @@ function evaluateRules(
   conditions: Record<string, unknown>,
   errors: FieldErrors,
 ) {
-  const ruleValues: Record<string, unknown> = { ...values }
-  for (const definition of definitions) {
-    const value = values[definition.name]
-    if (value === undefined || value === null) continue
-    if (definition.type === 'Number') {
-      const number = typeof value === 'number' ? value : Number(value)
-      ruleValues[definition.name] = Number.isFinite(number) ? number : undefined
-      continue
-    }
-    if (definition.type === availabilityZoneType || definition.type === 'CommaDelimitedList' || definition.type.startsWith('List<')) {
-      ruleValues[definition.name] = listFrom(value)?.map(String) ?? []
-      continue
-    }
-    if (!Array.isArray(value)) {
-      ruleValues[definition.name] = String(value)
-    }
-  }
+  const ruleValues = normalizeValuesForLocalEvaluation(definitions, values)
 
   const definitionNames = new Set(definitions.map((definition) => definition.name))
 

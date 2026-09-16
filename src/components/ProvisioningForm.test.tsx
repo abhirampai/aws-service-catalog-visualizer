@@ -243,6 +243,31 @@ describe('ProvisioningForm', () => {
     expect(screen.getByRole('region', { name: 'CloudFormation outputs' })).toHaveTextContent('Local preview could not resolve Fn::If.')
   })
 
+  it('evaluates output conditions with normalized number parameter values', async () => {
+    const user = userEvent.setup()
+    render(
+      <ProvisioningForm
+        definitions={definitions}
+        rules={[]}
+        conditions={{ IsOne: { 'Fn::Equals': [{ Ref: 'InstanceCount' }, 1] } }}
+        outputs={[{
+          name: 'ScaleTier',
+          kind: 'expression',
+          valueExpression: { 'Fn::If': ['IsOne', 'single', 'multi'] },
+        }]}
+        warnings={[]}
+        onReview={() => undefined}
+      />,
+    )
+
+    const outputRegion = screen.getByRole('region', { name: 'CloudFormation outputs' })
+    expect(outputRegion).toHaveTextContent('multi')
+
+    await user.clear(screen.getByLabelText('Instance Count'))
+    await user.type(screen.getByLabelText('Instance Count'), '1')
+    expect(outputRegion).toHaveTextContent('single')
+  })
+
   it('shows CloudFormation rule failures beside affected fields', async () => {
     const user = userEvent.setup()
     render(<ProvisioningForm definitions={definitions} rules={rules} outputs={[]} warnings={[]} onReview={() => undefined} />)

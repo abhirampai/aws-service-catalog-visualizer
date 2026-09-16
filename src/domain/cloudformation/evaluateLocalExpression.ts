@@ -224,10 +224,10 @@ export function evaluateLocalExpression(
   if (record['Fn::Equals'] !== undefined) {
     const args = record['Fn::Equals']
     if (!Array.isArray(args) || args.length !== 2) return undefined
-    return valuesEqual(
-      evaluateLocalExpression(args[0], context, cache, resolving),
-      evaluateLocalExpression(args[1], context, cache, resolving),
-    )
+    const left = evaluateLocalExpression(args[0], context, cache, resolving)
+    const right = evaluateLocalExpression(args[1], context, cache, resolving)
+    if (left === undefined || right === undefined) return undefined
+    return valuesEqual(left, right)
   }
 
   if (record['Fn::Not'] !== undefined) {

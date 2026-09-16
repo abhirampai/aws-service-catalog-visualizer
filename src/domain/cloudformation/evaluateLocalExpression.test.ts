@@ -39,7 +39,14 @@ describe('evaluateLocalExpression', () => {
   })
 
   it('returns undefined for unresolved or unsupported local expressions', () => {
+    expect(evaluateLocalExpression({ 'Fn::Equals': [{ Ref: 'MissingA' }, { Ref: 'MissingB' }] }, { values: {} })).toBeUndefined()
     expect(evaluateLocalExpression({ 'Fn::If': ['MissingCondition', 'yes', 'no'] }, { values: {} })).toBeUndefined()
+    expect(evaluateLocalExpression({ 'Fn::If': ['ConditionWithUnknownRefs', 'yes', 'no'] }, {
+      values: {},
+      conditions: {
+        ConditionWithUnknownRefs: { 'Fn::Equals': [{ Ref: 'MissingA' }, { Ref: 'MissingB' }] },
+      },
+    })).toBeUndefined()
     expect(evaluateLocalExpression({ 'Fn::Sub': 'arn:${Bucket.Arn}' }, { values: {} })).toBeUndefined()
     expect(evaluateLocalExpression({ 'Fn::GetAtt': ['Bucket', 'Arn'] }, { values: {} })).toBeUndefined()
     expect(evaluateLocalExpression({ 'Fn::Select': [0, 'a,b'] }, { values: {} })).toBeUndefined()

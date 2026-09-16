@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { OutputDefinition, ParameterDefinition, RuleDefinition } from '../domain/cloudformation/types'
 import { evaluateLocalExpression, expressionName } from '../domain/cloudformation/evaluateLocalExpression'
 import { createPayload } from '../domain/provisioning/createPayload'
-import { validateValues, type FieldErrors } from '../domain/provisioning/validateValues'
+import { normalizeValuesForLocalEvaluation, validateValues, type FieldErrors } from '../domain/provisioning/validateValues'
 import { ParameterField } from './ParameterField'
 import { ReviewPayload } from './ReviewPayload'
 
@@ -76,13 +76,14 @@ function valuesFromDefinitions(definitions: ParameterDefinition[]): Record<strin
 function renderedOutputValue(
   output: OutputDefinition,
   values: Record<string, unknown>,
+  normalizedValues: Record<string, unknown>,
   definitionNames: Set<string>,
   conditions: Record<string, unknown>,
   mappings: Record<string, unknown>,
 ): string {
   if (output.kind === 'literal') return String(output.value)
   if (output.kind === 'expression') {
-    const value = evaluateLocalExpression(output.valueExpression, { values, conditions, mappings })
+    const value = evaluateLocalExpression(output.valueExpression, { values: normalizedValues, conditions, mappings })
     if (!isDisplayableOutputValue(value)) {
       return `Local preview could not resolve ${expressionName(output.valueExpression) ?? 'this output expression'}.`
     }
@@ -137,6 +138,7 @@ export function ProvisioningForm({ definitions, rules, conditions = {}, mappings
   const previousDefinitionsRef = useRef(definitions)
   const modelSignature = JSON.stringify({ definitions, rules })
   const definitionNames = new Set(definitions.map((definition) => definition.name))
+  const normalizedValuesForLocalEvaluation = normalizeValuesForLocalEvaluation(definitions, values)
 
   useEffect(() => {
     setValues((current) => reconcileValuesFromDefinitions(current, previousDefinitionsRef.current, definitions))
@@ -188,7 +190,7 @@ export function ProvisioningForm({ definitions, rules, conditions = {}, mappings
               <div key={output.name} className="output-item">
                 <dt>{output.name}</dt>
                 {output.description && <p className="field-description">{output.description}</p>}
-                <dd>{renderedOutputValue(output, values, definitionNames, conditions, mappings)}</dd>
+                <dd>{renderedOutputValue(output, values, normalizedValuesForLocalEvaluation, definitionNames, conditions, mappings)}</dd>
               </div>
             ))}
           </dl>
