@@ -23,6 +23,7 @@ describe('evaluateLocalExpression', () => {
     expect(evaluateLocalExpression({ 'Fn::Join': ['-', [{ Ref: 'ApplicationName' }, 'assets']] }, { values, mappings, conditions })).toBe('catalog-demo-assets')
     expect(evaluateLocalExpression({ 'Fn::Split': ['-', 'prod-blue'] }, { values, mappings, conditions })).toEqual(['prod', 'blue'])
     expect(evaluateLocalExpression({ 'Fn::Select': [1, { 'Fn::Split': ['-', 'prod-blue'] }] }, { values, mappings, conditions })).toBe('blue')
+    expect(evaluateLocalExpression({ 'Fn::Select': [0, ['blue', 'green']] }, { values, mappings, conditions })).toBe('blue')
     expect(evaluateLocalExpression({ 'Fn::Sub': 'https://${ApplicationName}.${Domain}' }, {
       values: { ...values, Domain: 'example.com' },
       mappings,
@@ -34,6 +35,7 @@ describe('evaluateLocalExpression', () => {
     }] }, { values, mappings, conditions })).toBe('https://catalog-demo.prod.internal')
     expect(evaluateLocalExpression({ 'Fn::Contains': [{ Ref: 'AvailabilityZones' }, 'us-east-1a'] }, { values, mappings, conditions })).toBe(true)
     expect(unsupportedLocalExpression({ 'Fn::FindInMap': ['EnvConfig', { Ref: 'Environment' }, 'Domain'] })).toBeUndefined()
+    expect(unsupportedLocalExpression({ 'Fn::Select': [0, ['blue', 'green']] })).toBeUndefined()
   })
 
   it('returns undefined for unresolved or unsupported local expressions', () => {

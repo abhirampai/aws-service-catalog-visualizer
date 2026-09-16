@@ -130,8 +130,22 @@ export function unsupportedLocalExpression(value: unknown): string | undefined {
     return undefined
   }
 
-  if (key === 'Fn::Equals' || key === 'Fn::Contains' || key === 'Fn::EachMemberEquals' || key === 'Fn::EachMemberIn' || key === 'Fn::Split' || key === 'Fn::Select') {
+  if (key === 'Fn::Equals' || key === 'Fn::Contains' || key === 'Fn::EachMemberEquals' || key === 'Fn::EachMemberIn' || key === 'Fn::Split') {
     return Array.isArray(args) && args.length === 2 ? unsupportedFromItems(args) : key
+  }
+
+  if (key === 'Fn::Select') {
+    if (!Array.isArray(args) || args.length !== 2) return key
+    const unsupportedIndex = unsupportedLocalExpression(args[0])
+    if (unsupportedIndex) return unsupportedIndex
+
+    if (!Array.isArray(args[1])) return unsupportedLocalExpression(args[1])
+    for (const item of args[1]) {
+      if (expressionName(item) === undefined) continue
+      const unsupportedItem = unsupportedLocalExpression(item)
+      if (unsupportedItem) return unsupportedItem
+    }
+    return undefined
   }
 
   if (key === 'Fn::Not') {
