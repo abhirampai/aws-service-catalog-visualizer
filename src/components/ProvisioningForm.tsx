@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { OutputDefinition, ParameterDefinition, RuleDefinition } from '../domain/cloudformation/types'
+import { evaluateLocalExpression, expressionName } from '../domain/cloudformation/evaluateLocalExpression'
 import { createPayload } from '../domain/provisioning/createPayload'
-import { validateValues, type FieldErrors } from '../domain/provisioning/validateValues'
+import { normalizeValuesForLocalEvaluation, validateValues, type FieldErrors } from '../domain/provisioning/validateValues'
 import { ParameterField } from './ParameterField'
 import { ReviewPayload } from './ReviewPayload'
 
@@ -9,6 +10,7 @@ interface ProvisioningFormProps {
   definitions: ParameterDefinition[]
   rules: RuleDefinition[]
   conditions?: Record<string, unknown>
+  mappings?: Record<string, unknown>
   outputs: OutputDefinition[]
   warnings: string[]
   onReview: (payload: Record<string, string | string[]>) => void
@@ -17,6 +19,14 @@ interface ProvisioningFormProps {
 }
 
 const availabilityZoneType = 'List<AWS::EC2::AvailabilityZone::Name>'
+
+function isDisplayableOutputValue(value: unknown): value is string | number | boolean | Array<string | number | boolean> {
+  return typeof value === 'string'
+    || typeof value === 'number'
+    || typeof value === 'boolean'
+    || (Array.isArray(value) && value.every((item) =>
+      typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean'))
+}
 
 function defaultValueForDefinition(definition: ParameterDefinition): string | number | string[] | undefined {
   const value = definition.defaultValue
@@ -66,9 +76,19 @@ function valuesFromDefinitions(definitions: ParameterDefinition[]): Record<strin
 function renderedOutputValue(
   output: OutputDefinition,
   values: Record<string, unknown>,
+  normalizedValues: Record<string, unknown>,
   definitionNames: Set<string>,
+  conditions: Record<string, unknown>,
+  mappings: Record<string, unknown>,
 ): string {
   if (output.kind === 'literal') return String(output.value)
+  if (output.kind === 'expression') {
+    const value = evaluateLocalExpression(output.valueExpression, { values: normalizedValues, conditions, mappings })
+    if (!isDisplayableOutputValue(value)) {
+      return `Local preview could not resolve ${expressionName(output.valueExpression) ?? 'this output expression'}.`
+    }
+    return Array.isArray(value) ? value.join(', ') : String(value)
+  }
   if (output.kind === 'unsupported') {
     return `Unsupported local output expression: ${output.expression ?? 'unknown'}.`
   }
@@ -111,13 +131,14 @@ export function reconcileValuesFromDefinitions(
   }))
 }
 
-export function ProvisioningForm({ definitions, rules, conditions = {}, outputs, warnings, onReview, productName = 'CloudFormation product', productDescription = 'Configure this product' }: ProvisioningFormProps) {
+export function ProvisioningForm({ definitions, rules, conditions = {}, mappings = {}, outputs, warnings, onReview, productName = 'CloudFormation product', productDescription = 'Configure this product' }: ProvisioningFormProps) {
   const [values, setValues] = useState<Record<string, unknown>>(() => valuesFromDefinitions(definitions))
   const [errors, setErrors] = useState<FieldErrors>({})
   const [payload, setPayload] = useState<Record<string, string | string[]> | null>(null)
   const previousDefinitionsRef = useRef(definitions)
   const modelSignature = JSON.stringify({ definitions, rules })
   const definitionNames = new Set(definitions.map((definition) => definition.name))
+  const normalizedValuesForLocalEvaluation = normalizeValuesForLocalEvaluation(definitions, values)
 
   useEffect(() => {
     setValues((current) => reconcileValuesFromDefinitions(current, previousDefinitionsRef.current, definitions))
@@ -169,7 +190,7 @@ export function ProvisioningForm({ definitions, rules, conditions = {}, outputs,
               <div key={output.name} className="output-item">
                 <dt>{output.name}</dt>
                 {output.description && <p className="field-description">{output.description}</p>}
-                <dd>{renderedOutputValue(output, values, definitionNames)}</dd>
+                <dd>{renderedOutputValue(output, values, normalizedValuesForLocalEvaluation, definitionNames, conditions, mappings)}</dd>
               </div>
             ))}
           </dl>

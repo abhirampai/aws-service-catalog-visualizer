@@ -272,6 +272,92 @@ describe('normalizeParameters', () => {
     ])
   })
 
+  it('resolves supported intrinsic defaults from local values and conditions', () => {
+    const result = normalizeParameters({
+      Mappings: {
+        EnvConfig: {
+          dev: { Domain: 'dev.internal' },
+          prod: { Domain: 'prod.internal' },
+        },
+      },
+      Conditions: {
+        IsProd: { 'Fn::Equals': [{ Ref: 'Environment' }, 'prod'] },
+      },
+      Parameters: {
+        ApplicationName: { Type: 'String', Default: 'catalog-demo' },
+        Environment: { Type: 'String', Default: 'prod' },
+        DomainName: {
+          Type: 'String',
+          Default: { 'Fn::FindInMap': ['EnvConfig', { Ref: 'Environment' }, 'Domain'] },
+        },
+        SiteName: {
+          Type: 'String',
+          Default: { 'Fn::Join': ['-', [{ Ref: 'ApplicationName' }, { 'Fn::If': ['IsProd', 'live', 'preview'] }]] },
+        },
+        PreferredZone: {
+          Type: 'String',
+          Default: { 'Fn::Select': [1, { 'Fn::Split': [',', 'us-east-1a,us-east-1c'] }] },
+        },
+      },
+    })
+
+    expect(result.definitions.map(({ name, defaultValue, required }) => ({ name, defaultValue, required }))).toEqual([
+      { name: 'ApplicationName', defaultValue: 'catalog-demo', required: false },
+      { name: 'Environment', defaultValue: 'prod', required: false },
+      { name: 'DomainName', defaultValue: 'prod.internal', required: false },
+      { name: 'SiteName', defaultValue: 'catalog-demo-live', required: false },
+      { name: 'PreferredZone', defaultValue: 'us-east-1c', required: false },
+    ])
+    expect(result.warnings).toEqual([])
+  })
+
+  it('warns when a parameter default uses an unsupported intrinsic expression', () => {
+    const result = normalizeParameters({
+      Parameters: {
+        BucketArn: {
+          Type: 'String',
+          Default: { 'Fn::GetAtt': ['Bucket', 'Arn'] },
+        },
+      },
+    })
+
+    expect(result.definitions).toEqual([
+      expect.objectContaining({
+        name: 'BucketArn',
+        defaultValue: undefined,
+        required: true,
+      }),
+    ])
+    expect(result.warnings).toEqual([
+      'Parameter BucketArn uses unsupported expression Fn::GetAtt in its default and it was ignored.',
+    ])
+  })
+
+  it('keeps nested unsupported intrinsic defaults classified as unsupported', () => {
+    const result = normalizeParameters({
+      Conditions: {
+        UseBucketArn: { 'Fn::Equals': ['yes', 'yes'] },
+      },
+      Parameters: {
+        BucketValue: {
+          Type: 'String',
+          Default: { 'Fn::If': ['UseBucketArn', { 'Fn::GetAtt': ['Bucket', 'Arn'] }, 'ready'] },
+        },
+      },
+    })
+
+    expect(result.definitions).toEqual([
+      expect.objectContaining({
+        name: 'BucketValue',
+        defaultValue: undefined,
+        required: true,
+      }),
+    ])
+    expect(result.warnings).toEqual([
+      'Parameter BucketValue uses unsupported expression Fn::GetAtt in its default and it was ignored.',
+    ])
+  })
+
   it('normalizes scalar and Ref outputs and preserves unsupported expressions for local preview', () => {
     const result = normalizeParameters({
       Parameters: {
@@ -314,6 +400,67 @@ describe('normalizeParameters', () => {
     ])
     expect(result.warnings).toEqual([
       'Output BucketArn uses unsupported expression Fn::GetAtt and will be shown as unsupported in local preview.',
+    ])
+  })
+
+  it('normalizes supported output expressions for local preview evaluation', () => {
+    const result = normalizeParameters({
+      Conditions: {
+        IsProd: { 'Fn::Equals': [{ Ref: 'Environment' }, 'prod'] },
+      },
+      Parameters: {
+        ApplicationName: { Type: 'String', Default: 'playground-app' },
+        Environment: { Type: 'String', Default: 'prod' },
+      },
+      Outputs: {
+        WebsiteUrl: {
+          Value: { 'Fn::Sub': 'https://${ApplicationName}.example.com' },
+        },
+        ReleaseName: {
+          Value: { 'Fn::Join': ['-', [{ Ref: 'ApplicationName' }, { 'Fn::If': ['IsProd', 'live', 'preview'] }]] },
+        },
+      },
+    })
+
+    expect(result.outputs).toEqual([
+      {
+        name: 'WebsiteUrl',
+        description: undefined,
+        kind: 'expression',
+        valueExpression: { 'Fn::Sub': 'https://${ApplicationName}.example.com' },
+      },
+      {
+        name: 'ReleaseName',
+        description: undefined,
+        kind: 'expression',
+        valueExpression: { 'Fn::Join': ['-', [{ Ref: 'ApplicationName' }, { 'Fn::If': ['IsProd', 'live', 'preview'] }]] },
+      },
+    ])
+    expect(result.warnings).toEqual([])
+  })
+
+  it('keeps nested unsupported output expressions classified as unsupported', () => {
+    const result = normalizeParameters({
+      Conditions: {
+        IsProd: { 'Fn::Equals': ['prod', 'prod'] },
+      },
+      Outputs: {
+        BucketValue: {
+          Value: { 'Fn::If': ['IsProd', { 'Fn::GetAtt': ['Bucket', 'Arn'] }, 'ready'] },
+        },
+      },
+    })
+
+    expect(result.outputs).toEqual([
+      {
+        name: 'BucketValue',
+        description: undefined,
+        kind: 'unsupported',
+        expression: 'Fn::GetAtt',
+      },
+    ])
+    expect(result.warnings).toEqual([
+      'Output BucketValue uses unsupported expression Fn::GetAtt and will be shown as unsupported in local preview.',
     ])
   })
 

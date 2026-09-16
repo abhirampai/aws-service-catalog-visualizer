@@ -25,9 +25,10 @@ export interface ParameterDefinition {
 export interface OutputDefinition {
   name: string
   description?: string
-  kind: 'literal' | 'ref' | 'unsupported'
+  kind: 'literal' | 'ref' | 'expression' | 'unsupported'
   value?: string | number
   referenceName?: string
+  valueExpression?: unknown
   expression?: string
 }
 
@@ -59,6 +60,7 @@ export interface NormalizationResult {
   definitions: ParameterDefinition[]
   rules: RuleDefinition[]
   conditions: Record<string, unknown>
+  mappings: Record<string, unknown>
   outputs: OutputDefinition[]
   warnings: string[]
   productName: string
