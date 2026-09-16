@@ -1,4 +1,5 @@
 import type { ParameterDefinition, RuleDefinition } from '../cloudformation/types'
+import { evaluateLocalExpression } from '../cloudformation/evaluateLocalExpression'
 
 export type FieldErrors = Record<string, string>
 
@@ -15,136 +16,12 @@ function matchesAllowedValue(value: unknown, allowedValue: string | number): boo
   return String(value) === String(allowedValue)
 }
 
-function valuesEqual(left: unknown, right: unknown): boolean {
-  if (Array.isArray(left) || Array.isArray(right)) {
-    return Array.isArray(left)
-      && Array.isArray(right)
-      && left.length === right.length
-      && left.every((value, index) => valuesEqual(value, right[index]))
-  }
-  return left === right
-}
-
 function listFrom(value: unknown): unknown[] | undefined {
   if (Array.isArray(value)) return value
   if (typeof value === 'string') {
     return value.split(',').map((item) => item.trim()).filter((item) => item.length > 0)
   }
   return undefined
-}
-
-function evaluateValue(
-  expression: unknown,
-  values: Record<string, unknown>,
-  conditions: Record<string, unknown>,
-  cache: Map<string, boolean | undefined> = new Map(),
-  resolving: Set<string> = new Set(),
-): unknown {
-  const evaluateCondition = (conditionName: string): boolean | undefined => {
-    if (cache.has(conditionName)) return cache.get(conditionName)
-    if (resolving.has(conditionName)) return undefined
-    const conditionExpression = conditions[conditionName]
-    if (conditionExpression === undefined) return undefined
-    resolving.add(conditionName)
-    const result = evaluateBoolean(conditionExpression, values, conditions, cache, resolving)
-    resolving.delete(conditionName)
-    cache.set(conditionName, result)
-    return result
-  }
-
-  if (Array.isArray(expression)) return expression.map((item) => evaluateValue(item, values, conditions, cache, resolving))
-  if (!expression || typeof expression !== 'object') return expression
-
-  const record = expression as Record<string, unknown>
-
-  if (typeof record.Ref === 'string') {
-    return values[record.Ref]
-  }
-  if (typeof record.Condition === 'string') {
-    return evaluateCondition(record.Condition)
-  }
-
-  if (Object.keys(record).length !== 1) return undefined
-
-  if (record['Fn::Equals'] !== undefined) {
-    const args = record['Fn::Equals']
-    if (!Array.isArray(args) || args.length !== 2) return undefined
-    return valuesEqual(
-      evaluateValue(args[0], values, conditions, cache, resolving),
-      evaluateValue(args[1], values, conditions, cache, resolving),
-    )
-  }
-
-  if (record['Fn::Not'] !== undefined) {
-    const args = record['Fn::Not']
-    if (!Array.isArray(args) || args.length !== 1) return undefined
-    const value = evaluateBoolean(args[0], values, conditions, cache, resolving)
-    return value === undefined ? undefined : !value
-  }
-
-  if (record['Fn::And'] !== undefined) {
-    const args = record['Fn::And']
-    if (!Array.isArray(args) || args.length < 2 || args.length > 10) return undefined
-    let hasUnknown = false
-    for (const item of args) {
-      const value = evaluateBoolean(item, values, conditions, cache, resolving)
-      if (value === false) return false
-      if (value === undefined) hasUnknown = true
-    }
-    return hasUnknown ? undefined : true
-  }
-
-  if (record['Fn::Or'] !== undefined) {
-    const args = record['Fn::Or']
-    if (!Array.isArray(args) || args.length < 2 || args.length > 10) return undefined
-    let hasUnknown = false
-    for (const item of args) {
-      const value = evaluateBoolean(item, values, conditions, cache, resolving)
-      if (value === true) return true
-      if (value === undefined) hasUnknown = true
-    }
-    return hasUnknown ? undefined : false
-  }
-
-  if (record['Fn::Contains'] !== undefined) {
-    const args = record['Fn::Contains']
-    if (!Array.isArray(args) || args.length !== 2) return undefined
-    const list = listFrom(evaluateValue(args[0], values, conditions, cache, resolving))
-    if (!list) return undefined
-    const target = evaluateValue(args[1], values, conditions, cache, resolving)
-    return list.some((item) => valuesEqual(item, target))
-  }
-
-  if (record['Fn::EachMemberEquals'] !== undefined) {
-    const args = record['Fn::EachMemberEquals']
-    if (!Array.isArray(args) || args.length !== 2) return undefined
-    const list = listFrom(evaluateValue(args[0], values, conditions, cache, resolving))
-    if (!list) return undefined
-    const target = evaluateValue(args[1], values, conditions, cache, resolving)
-    return list.every((item) => valuesEqual(item, target))
-  }
-
-  if (record['Fn::EachMemberIn'] !== undefined) {
-    const args = record['Fn::EachMemberIn']
-    if (!Array.isArray(args) || args.length !== 2) return undefined
-    const candidates = listFrom(evaluateValue(args[0], values, conditions, cache, resolving))
-    const allowed = listFrom(evaluateValue(args[1], values, conditions, cache, resolving))
-    if (!candidates || !allowed) return undefined
-    return candidates.every((candidate) => allowed.some((item) => valuesEqual(item, candidate)))
-  }
-
-  return undefined
-}
-
-function evaluateBoolean(
-  expression: unknown,
-  values: Record<string, unknown>,
-  conditions: Record<string, unknown>,
-  cache: Map<string, boolean | undefined> = new Map(),
-  resolving: Set<string> = new Set(),
-): boolean | undefined {
-  const result = evaluateValue(expression, values, conditions, cache, resolving)
-  return typeof result === 'boolean' ? result : undefined
 }
 
 function addError(errors: FieldErrors, name: string, message: string) {
@@ -186,10 +63,11 @@ function evaluateRules(
   const definitionNames = new Set(definitions.map((definition) => definition.name))
 
   for (const rule of rules) {
-    if (rule.condition !== undefined && evaluateValue(rule.condition, ruleValues, conditions) === false) continue
+    const context = { values: ruleValues, conditions }
+    if (rule.condition !== undefined && evaluateLocalExpression(rule.condition, context) === false) continue
 
     for (const assertion of rule.assertions) {
-      const matches = evaluateValue(assertion.assert, ruleValues, conditions)
+      const matches = evaluateLocalExpression(assertion.assert, context)
       if (matches !== false) continue
 
       const message = assertion.description || `Rule ${rule.name} assertion failed.`

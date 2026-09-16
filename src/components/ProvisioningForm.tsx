@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { OutputDefinition, ParameterDefinition, RuleDefinition } from '../domain/cloudformation/types'
+import { evaluateLocalExpression, expressionName } from '../domain/cloudformation/evaluateLocalExpression'
 import { createPayload } from '../domain/provisioning/createPayload'
 import { validateValues, type FieldErrors } from '../domain/provisioning/validateValues'
 import { ParameterField } from './ParameterField'
@@ -9,6 +10,7 @@ interface ProvisioningFormProps {
   definitions: ParameterDefinition[]
   rules: RuleDefinition[]
   conditions?: Record<string, unknown>
+  mappings?: Record<string, unknown>
   outputs: OutputDefinition[]
   warnings: string[]
   onReview: (payload: Record<string, string | string[]>) => void
@@ -67,8 +69,17 @@ function renderedOutputValue(
   output: OutputDefinition,
   values: Record<string, unknown>,
   definitionNames: Set<string>,
+  conditions: Record<string, unknown>,
+  mappings: Record<string, unknown>,
 ): string {
   if (output.kind === 'literal') return String(output.value)
+  if (output.kind === 'expression') {
+    const value = evaluateLocalExpression(output.valueExpression, { values, conditions, mappings })
+    if (value === undefined) {
+      return `Local preview could not resolve ${expressionName(output.valueExpression) ?? 'this output expression'}.`
+    }
+    return Array.isArray(value) ? value.join(', ') : String(value)
+  }
   if (output.kind === 'unsupported') {
     return `Unsupported local output expression: ${output.expression ?? 'unknown'}.`
   }
@@ -111,7 +122,7 @@ export function reconcileValuesFromDefinitions(
   }))
 }
 
-export function ProvisioningForm({ definitions, rules, conditions = {}, outputs, warnings, onReview, productName = 'CloudFormation product', productDescription = 'Configure this product' }: ProvisioningFormProps) {
+export function ProvisioningForm({ definitions, rules, conditions = {}, mappings = {}, outputs, warnings, onReview, productName = 'CloudFormation product', productDescription = 'Configure this product' }: ProvisioningFormProps) {
   const [values, setValues] = useState<Record<string, unknown>>(() => valuesFromDefinitions(definitions))
   const [errors, setErrors] = useState<FieldErrors>({})
   const [payload, setPayload] = useState<Record<string, string | string[]> | null>(null)
@@ -169,7 +180,7 @@ export function ProvisioningForm({ definitions, rules, conditions = {}, outputs,
               <div key={output.name} className="output-item">
                 <dt>{output.name}</dt>
                 {output.description && <p className="field-description">{output.description}</p>}
-                <dd>{renderedOutputValue(output, values, definitionNames)}</dd>
+                <dd>{renderedOutputValue(output, values, definitionNames, conditions, mappings)}</dd>
               </div>
             ))}
           </dl>

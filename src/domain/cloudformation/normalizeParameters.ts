@@ -6,10 +6,10 @@ import type {
   ParameterDefinition,
   RuleDefinition,
 } from './types'
+import { evaluateLocalExpression, expressionName, isSupportedLocalExpression } from './evaluateLocalExpression'
 
 const supportedTypes = new Set(['String', 'Number', 'List<AWS::EC2::AvailabilityZone::Name>'])
 const availabilityZoneType = 'List<AWS::EC2::AvailabilityZone::Name>'
-const supportedConditionFunctions = new Set(['Fn::And', 'Fn::Or', 'Fn::Not', 'Fn::Equals'])
 export const LOCAL_AVAILABILITY_ZONES = ['us-east-1a', 'us-east-1b', 'us-east-1c'] as const
 
 function labelFor(name: string): string {
@@ -40,39 +40,11 @@ function isFindInMap(value: unknown): value is { 'Fn::FindInMap': unknown } {
   return !!record && Object.prototype.hasOwnProperty.call(record, 'Fn::FindInMap')
 }
 
-function resolveScalar(
-  value: unknown,
-  mappings: Record<string, unknown>,
-  resolveRef: (name: string) => string | number | undefined,
-): string | number | undefined {
-  if (isScalar(value)) return value
-
-  const record = asRecord(value)
-  if (!record) return undefined
-
-  if (typeof record.Ref === 'string') {
-    return resolveRef(record.Ref)
-  }
-
-  const lookup = record['Fn::FindInMap']
-  if (!Array.isArray(lookup) || lookup.length !== 3) return undefined
-
-  const mapName = resolveScalar(lookup[0], mappings, resolveRef)
-  const topLevelKey = resolveScalar(lookup[1], mappings, resolveRef)
-  const secondLevelKey = resolveScalar(lookup[2], mappings, resolveRef)
-  if (mapName === undefined || topLevelKey === undefined || secondLevelKey === undefined) return undefined
-
-  const mapRecord = asRecord(mappings[String(mapName)])
-  const topLevelRecord = asRecord(mapRecord?.[String(topLevelKey)])
-  const mappedValue = topLevelRecord?.[String(secondLevelKey)]
-  return isScalar(mappedValue) ? mappedValue : undefined
-}
-
 function warningForUnresolvedFindInMap(
   name: string,
   value: unknown,
   mappings: Record<string, unknown>,
-  resolveRef: (name: string) => string | number | undefined,
+  resolveRef: (name: string) => unknown,
 ): string | undefined {
   const record = asRecord(value)
   const lookup = record?.['Fn::FindInMap']
@@ -80,10 +52,14 @@ function warningForUnresolvedFindInMap(
     return `Parameter ${name} has an invalid Fn::FindInMap default and it was ignored.`
   }
 
-  const mapName = resolveScalar(lookup[0], mappings, resolveRef)
-  const topLevelKey = resolveScalar(lookup[1], mappings, resolveRef)
-  const secondLevelKey = resolveScalar(lookup[2], mappings, resolveRef)
-  if (mapName === undefined || topLevelKey === undefined || secondLevelKey === undefined) {
+  const values = new Proxy({}, {
+    get: (_, property) => typeof property === 'string' ? resolveRef(property) : undefined,
+  }) as Record<string, unknown>
+  const context = { values, mappings }
+  const mapName = evaluateLocalExpression(lookup[0], context)
+  const topLevelKey = evaluateLocalExpression(lookup[1], context)
+  const secondLevelKey = evaluateLocalExpression(lookup[2], context)
+  if (!isScalar(mapName) || !isScalar(topLevelKey) || !isScalar(secondLevelKey)) {
     return `Parameter ${name} has an unresolved Fn::FindInMap default and it was ignored.`
   }
 
@@ -108,9 +84,10 @@ function resolveParameterDefault(
   name: string,
   parameterRecords: Map<string, Record<string, unknown>>,
   mappings: Record<string, unknown>,
-  defaultsByName: Map<string, string | number>,
+  conditions: Record<string, unknown>,
+  defaultsByName: Map<string, unknown>,
   resolving: Set<string>,
-): string | number | undefined {
+): unknown {
   const cachedDefault = defaultsByName.get(name)
   if (cachedDefault !== undefined) return cachedDefault
   if (resolving.has(name)) return undefined
@@ -119,15 +96,16 @@ function resolveParameterDefault(
   if (!parameter) return undefined
 
   const defaultValue = parameter.Default
-  if (isScalar(defaultValue)) return defaultValue
-
-  const defaultRecord = asRecord(defaultValue)
-  if (!isFindInMap(defaultValue) && typeof defaultRecord?.Ref !== 'string') return undefined
+  if (isScalar(defaultValue) || Array.isArray(defaultValue)) return defaultValue
+  if (!asRecord(defaultValue)) return undefined
 
   resolving.add(name)
-  const resolvedDefault = resolveScalar(defaultValue, mappings, (refName) =>
-    resolveParameterDefault(refName, parameterRecords, mappings, defaultsByName, resolving),
-  )
+  const values = new Proxy({}, {
+    get: (_, property) => typeof property === 'string'
+      ? resolveParameterDefault(property, parameterRecords, mappings, conditions, defaultsByName, resolving)
+      : undefined,
+  }) as Record<string, unknown>
+  const resolvedDefault = evaluateLocalExpression(defaultValue, { values, mappings, conditions })
   resolving.delete(name)
 
   if (resolvedDefault !== undefined) defaultsByName.set(name, resolvedDefault)
@@ -172,15 +150,6 @@ function collectRuleConditionRefs(
   for (const item of Object.values(record)) collectRuleConditionRefs(item, conditions, refs, resolvingConditions)
 }
 
-function expressionName(value: unknown): string | undefined {
-  const record = asRecord(value)
-  if (!record) return undefined
-
-  if (record.Ref !== undefined) return 'Ref'
-  if (record.Condition !== undefined) return 'Condition'
-  return Object.keys(record).find((key) => key.startsWith('Fn::'))
-}
-
 function unsupportedConditionExpression(value: unknown): string | undefined {
   if (!value || typeof value !== 'object') return undefined
   const record = value as Record<string, unknown>
@@ -189,7 +158,7 @@ function unsupportedConditionExpression(value: unknown): string | undefined {
   if (typeof record.Condition === 'string' && keys.length === 1) return undefined
   if (keys.length !== 1) return 'an unsupported expression'
   const key = keys[0]
-  if (!supportedConditionFunctions.has(key)) return key
+  if (!new Set(['Fn::And', 'Fn::Or', 'Fn::Not', 'Fn::Equals']).has(key)) return key
 
   const args = record[key]
   if (!Array.isArray(args)) return key
@@ -231,8 +200,15 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
   const warnings: string[] = []
   const parameters = document.Parameters
   const mappings = asRecord(document.Mappings) ?? {}
-  const defaultsByName = new Map<string, string | number>()
+  const defaultsByName = new Map<string, unknown>()
   const parameterRecords = new Map<string, Record<string, unknown>>()
+  const rawConditions = document.Conditions
+
+  if (rawConditions && typeof rawConditions === 'object' && !Array.isArray(rawConditions)) {
+    for (const [name, value] of Object.entries(rawConditions)) {
+      conditions[name] = value
+    }
+  }
 
   if (parameters && typeof parameters === 'object' && !Array.isArray(parameters)) {
     for (const [name, value] of Object.entries(parameters)) {
@@ -264,18 +240,23 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
         warnings.push(`Parameter ${name} uses unsupported type ${type}; it is treated as text.`)
       }
 
-      const resolvesFromReference = isFindInMap(defaultValue) || typeof asRecord(defaultValue)?.Ref === 'string'
+      const defaultExpressionName = expressionName(defaultValue)
+      const resolvesLocally = isSupportedLocalExpression(defaultValue)
       const resolveDefaultByName = (parameterName: string) =>
-        resolveParameterDefault(parameterName, parameterRecords, mappings, defaultsByName, new Set<string>())
-      const resolvedDefault = resolvesFromReference
+        resolveParameterDefault(parameterName, parameterRecords, mappings, conditions, defaultsByName, new Set<string>())
+      const resolvedDefault = resolvesLocally
         ? resolveDefaultByName(name)
         : defaultValue
 
-      if (resolvesFromReference && resolvedDefault === undefined) {
+      if (resolvesLocally && resolvedDefault === undefined) {
         const warning = isFindInMap(defaultValue)
           ? warningForUnresolvedFindInMap(name, defaultValue, mappings, resolveDefaultByName)
-          : `Parameter ${name} has an unresolved Ref default and it was ignored.`
+          : defaultExpressionName === 'Ref'
+            ? `Parameter ${name} has an unresolved Ref default and it was ignored.`
+            : `Parameter ${name} has an unresolved ${defaultExpressionName ?? 'expression'} default and it was ignored.`
         if (warning) warnings.push(warning)
+      } else if (defaultValue !== undefined && !isScalar(defaultValue) && !Array.isArray(defaultValue) && !resolvesLocally) {
+        warnings.push(`Parameter ${name} uses unsupported expression ${defaultExpressionName ?? 'an unsupported expression'} in its default and it was ignored.`)
       }
 
       const normalizedDefault = listType
@@ -303,7 +284,7 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
       }
 
       definitions.push(definition)
-      if (isScalar(normalizedDefault)) defaultsByName.set(name, normalizedDefault)
+      if (normalizedDefault !== undefined) defaultsByName.set(name, normalizedDefault)
     }
   }
 
@@ -329,10 +310,8 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
     }
   }
 
-  const rawConditions = document.Conditions
   if (rawConditions && typeof rawConditions === 'object' && !Array.isArray(rawConditions)) {
     for (const [name, value] of Object.entries(rawConditions)) {
-      conditions[name] = value
       const unsupportedExpression = unsupportedConditionExpression(value)
       if (unsupportedExpression) {
         warnings.push(`Condition ${name} uses unsupported expression ${unsupportedExpression} and cannot be evaluated in local preview.`)
@@ -402,6 +381,16 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
         continue
       }
 
+      if (isSupportedLocalExpression(outputValue)) {
+        outputs.push({
+          name,
+          description: typeof raw.Description === 'string' ? raw.Description : undefined,
+          kind: 'expression',
+          valueExpression: outputValue,
+        })
+        continue
+      }
+
       const expression = expressionName(outputValue) ?? 'an unsupported expression'
       warnings.push(`Output ${name} uses unsupported expression ${expression} and will be shown as unsupported in local preview.`)
       outputs.push({
@@ -425,6 +414,7 @@ export function normalizeParameters(document: CloudFormationDocument): Normaliza
     definitions,
     rules,
     conditions,
+    mappings,
     outputs,
     warnings,
     productName: typeof copy?.ProductName === 'string' ? copy.ProductName : 'CloudFormation product',

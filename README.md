@@ -61,8 +61,9 @@ supported. Supported parameter and output behavior is:
 - `Number`, including `Default`, `Description`, `AllowedValues`, `MinValue`,
   and `MaxValue`.
 - `List<AWS::EC2::AvailabilityZone::Name>` with multiple selection.
-- `Mappings` lookups used by parameter defaults through `Fn::FindInMap` and
-  `Ref`, when they resolve to scalar values.
+- Parameter defaults and local output preview expressions that use the local
+  intrinsic subset: `Ref`, `Fn::FindInMap`, `Fn::If`, `Fn::Join`, `Fn::Split`,
+  `Fn::Select`, and `Fn::Sub`, when they resolve from local values.
 - `Rules` assertions that use local parameter values with `Fn::And`,
   `Fn::Or`, `Fn::Not`, `Fn::Equals`, `Fn::Contains`, `Fn::EachMemberEquals`,
   and `Fn::EachMemberIn`. Failed assertions are shown beside affected fields.
@@ -74,8 +75,9 @@ supported. Supported parameter and output behavior is:
   non-pseudo parameter name that is missing from `Parameters`, the preview adds
   a required text field for that name and shows a warning.
 - `Outputs` values render in the preview with optional descriptions. Literal
-  scalar values are shown directly, and direct `Ref` values use the current
-  local preview value when available.
+  scalar values are shown directly, direct `Ref` values use the current local
+  preview value when available, and supported local intrinsic expressions are
+  evaluated against the current preview state.
 
 Availability zones use the fixed local examples `us-east-1a`, `us-east-1b`,
 and `us-east-1c`. They are not fetched from AWS. Parameters without defaults
@@ -93,9 +95,9 @@ Metadata:
 Without those keys, the playground uses the generic product name and
 description shown in the form.
 
-Unsupported output expressions such as `Fn::GetAtt`, `Fn::Sub`, and unresolved
-AWS-managed values are shown clearly as unsupported local preview values rather
-than being sent anywhere or treated as real AWS results.
+Unsupported output expressions such as `Fn::GetAtt` and unresolved AWS-managed
+values are shown clearly as unsupported local preview values rather than being
+sent anywhere or treated as real AWS results.
 
 ## Local-Only Behavior
 

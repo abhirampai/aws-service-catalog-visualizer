@@ -60,6 +60,12 @@ const outputs: OutputDefinition[] = [
     value: 'static-value',
   },
   {
+    name: 'WebsiteUrl',
+    description: 'Uses a local intrinsic expression.',
+    kind: 'expression',
+    valueExpression: { 'Fn::Sub': 'https://${ProjectName}.example.com' },
+  },
+  {
     name: 'BucketArn',
     kind: 'unsupported',
     expression: 'Fn::GetAtt',
@@ -210,10 +216,12 @@ describe('ProvisioningForm', () => {
     expect(outputRegion).toHaveTextContent('Awaiting a value for Ref ProjectName.')
     expect(outputRegion).toHaveTextContent('dev')
     expect(outputRegion).toHaveTextContent('static-value')
+    expect(outputRegion).toHaveTextContent('Local preview could not resolve Fn::Sub.')
     expect(outputRegion).toHaveTextContent('Unsupported local output expression: Fn::GetAtt.')
 
     await user.type(screen.getByLabelText('Project Name'), 'catalog-demo')
     expect(outputRegion).toHaveTextContent('catalog-demo')
+    expect(outputRegion).toHaveTextContent('https://catalog-demo.example.com')
   })
 
   it('shows CloudFormation rule failures beside affected fields', async () => {
@@ -417,6 +425,29 @@ Rules:
     expect(screen.getByRole('region', { name: 'CloudFormation outputs' })).toHaveTextContent('Echoes the current application name.')
     expect(screen.getByRole('region', { name: 'CloudFormation outputs' })).toHaveTextContent('Unsupported local output expression: Fn::GetAtt.')
     expect(screen.getByText('Output BucketArn uses unsupported expression Fn::GetAtt and will be shown as unsupported in local preview.')).toBeInTheDocument()
+  })
+
+  it('renders supported output expressions from template edits against live values and conditions', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const editor = screen.getByRole('textbox', { name: 'CloudFormation template' })
+    const outputTemplate = `${SAMPLE_TEMPLATE}Conditions:
+  IsProd:
+    Fn::Equals: [!Ref Environment, prod]
+Outputs:
+  WebsiteUrl:
+    Value: !Sub https://\${ApplicationName}.example.com
+  ReleaseName:
+    Value: !Join ['-', [!Ref ApplicationName, !If [IsProd, live, preview]]]
+`.replace('Default: dev', 'Default: prod')
+
+    await user.click(editor)
+    await user.keyboard('{Control>}a{/Control}')
+    await user.keyboard('{Backspace}')
+    fireEvent.paste(editor, { clipboardData: { getData: () => outputTemplate } })
+
+    await waitFor(() => expect(screen.getByRole('region', { name: 'CloudFormation outputs' })).toHaveTextContent('https://playground-app.example.com'))
+    expect(screen.getByRole('region', { name: 'CloudFormation outputs' })).toHaveTextContent('playground-app-live')
   })
 })
 
