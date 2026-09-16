@@ -224,6 +224,25 @@ describe('ProvisioningForm', () => {
     expect(outputRegion).toHaveTextContent('https://catalog-demo.example.com')
   })
 
+  it('falls back when a supported output expression resolves to a non-renderable object', () => {
+    render(
+      <ProvisioningForm
+        definitions={definitions}
+        rules={[]}
+        conditions={{ IsProd: { 'Fn::Equals': ['prod', 'prod'] } }}
+        outputs={[{
+          name: 'ConditionalObject',
+          kind: 'expression',
+          valueExpression: { 'Fn::If': ['IsProd', { 'Fn::GetAtt': ['Bucket', 'Arn'] }, 'ready'] },
+        }]}
+        warnings={[]}
+        onReview={() => undefined}
+      />,
+    )
+
+    expect(screen.getByRole('region', { name: 'CloudFormation outputs' })).toHaveTextContent('Local preview could not resolve Fn::If.')
+  })
+
   it('shows CloudFormation rule failures beside affected fields', async () => {
     const user = userEvent.setup()
     render(<ProvisioningForm definitions={definitions} rules={rules} outputs={[]} warnings={[]} onReview={() => undefined} />)

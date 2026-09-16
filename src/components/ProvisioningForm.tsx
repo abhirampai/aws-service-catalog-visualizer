@@ -20,6 +20,14 @@ interface ProvisioningFormProps {
 
 const availabilityZoneType = 'List<AWS::EC2::AvailabilityZone::Name>'
 
+function isDisplayableOutputValue(value: unknown): value is string | number | boolean | Array<string | number | boolean> {
+  return typeof value === 'string'
+    || typeof value === 'number'
+    || typeof value === 'boolean'
+    || (Array.isArray(value) && value.every((item) =>
+      typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean'))
+}
+
 function defaultValueForDefinition(definition: ParameterDefinition): string | number | string[] | undefined {
   const value = definition.defaultValue
   return definition.type === availabilityZoneType && typeof value === 'string'
@@ -75,7 +83,7 @@ function renderedOutputValue(
   if (output.kind === 'literal') return String(output.value)
   if (output.kind === 'expression') {
     const value = evaluateLocalExpression(output.valueExpression, { values, conditions, mappings })
-    if (value === undefined) {
+    if (!isDisplayableOutputValue(value)) {
       return `Local preview could not resolve ${expressionName(output.valueExpression) ?? 'this output expression'}.`
     }
     return Array.isArray(value) ? value.join(', ') : String(value)
